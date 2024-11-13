@@ -8,7 +8,7 @@ from app.database import Base, get_db
 from app.config import settings
 
 # นำเข้าโมเดลที่ต้องการทดสอบ
-from app.models.customer import Customer  
+from app.models.user import User  
 from app.models.product import Product
 
 # Database URL สำหรับการทดสอบ (ควรเป็นฐานข้อมูลแยกเฉพาะสำหรับการทดสอบ)
@@ -48,14 +48,14 @@ def test_database_connection(db_session):
 # ตัวอย่างการทดสอบ CRUD เบื้องต้น (อาจต้องสร้างโมเดลที่ใช้งานจริงในระบบ)
 def test_create_and_query_customer(db_session):
     # ตัวอย่างโค้ด: เพิ่มข้อมูลลูกค้าใหม่ในฐานข้อมูล
-    from app.models.customer import Customer  # แก้ไขให้ตรงกับชื่อไฟล์และโมเดลของคุณ
-    new_customer = Customer(name="Test Customer", email="test@example.com")
+    from app.models.user import User  # แก้ไขให้ตรงกับชื่อไฟล์และโมเดลของคุณ
+    new_customer = User(name="Test Customer", email="test@example.com")
     
     db_session.add(new_customer)
     db_session.commit()
     db_session.refresh(new_customer)
     
     # ตรวจสอบว่าลูกค้าถูกสร้างในฐานข้อมูล
-    queried_customer = db_session.query(Customer).filter_by(email="test@example.com").first()
+    queried_customer = db_session.query(User).filter_by(email="test@example.com").first()
     assert queried_customer is not None
     assert queried_customer.name == "Test Customer"
