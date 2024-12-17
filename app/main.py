@@ -2,8 +2,12 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import user
+from app.routers import user, product , public
 from fastapi.openapi.utils import get_openapi
+from fastapi.templating import Jinja2Templates
+
+# ตั้งค่า Templates Directory
+templates = Jinja2Templates(directory="app/templates")
 
 app = FastAPI()
 
@@ -26,6 +30,8 @@ app.openapi = custom_openapi
 app.include_router(user.router)
 app.include_router(user.protected_router)
 app.include_router(user.admin_router)
+app.include_router(product.router)
+app.include_router(public.router)
 
 # CORS middleware เพื่อให้ Swagger UI สามารถทำงานได้
 app.add_middleware(

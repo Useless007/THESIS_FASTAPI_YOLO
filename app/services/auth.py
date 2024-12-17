@@ -1,4 +1,4 @@
-# services/auth.py
+# app/services/auth.py
 
 import bcrypt
 import jwt
@@ -84,3 +84,24 @@ def get_user_with_role_and_position(required_role: str, required_position: str):
             )
         return current_user
     return role_and_position_checker
+
+# ฟังก์ชันสำหรับตรวจสอบบทบาท ตำแหน่ง และสถานะการใช้งานของผู้ใช้
+def get_user_with_role_and_position_and_isActive(required_role: str, required_position: str):
+    def role_position_and_active_checker(current_user: User = Depends(get_current_user)):
+        if current_user.role != required_role:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Permission denied: Requires {required_role} role"
+            )
+        if current_user.position != required_position:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Permission denied: Requires {required_position} position"
+            )
+        if not current_user.is_active:
+            raise HTTPException(
+                status_code=403,
+                detail="Permission denied: User is not active"
+            )
+        return current_user
+    return role_position_and_active_checker

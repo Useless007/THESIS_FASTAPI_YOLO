@@ -6,3 +6,4 @@ python-dotenv
 passlib
 bcrypt
 pyjwt
+่jinja2
