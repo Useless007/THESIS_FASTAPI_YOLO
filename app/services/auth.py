@@ -11,7 +11,7 @@ from app.models.user import User
 from app.config import settings
 
 # กำหนด OAuth2 scheme เพื่อใช้ในการดึง token
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="getToken")
 
 # ฟังก์ชันสำหรับแฮชรหัสผ่าน
 def hash_password(password: str) -> str:

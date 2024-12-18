@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.routers import user, product , public
 from fastapi.openapi.utils import get_openapi
 from fastapi.templating import Jinja2Templates
@@ -41,3 +42,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ให้บริการไฟล์ static
+app.mount("/static", StaticFiles(directory="static"), name="static")

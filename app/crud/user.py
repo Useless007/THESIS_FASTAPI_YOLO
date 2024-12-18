@@ -12,7 +12,7 @@ def create_user(db: Session, user: UserCreate):
     hashed_password = hash_password(user.password)
     
     db_user = User(
-        username=user.username,
+        # username=user.username,
         email=user.email,
         password=hashed_password,
         name=user.name,
@@ -49,7 +49,7 @@ def update_user(db: Session, user_id: int, user: UserUpdate):
         hashed_password = hash_password(user.password)
 
     # อัปเดตฟิลด์ต่างๆ
-    db_user.username = user.username or db_user.username
+    # db_user.username = user.username or db_user.username
     db_user.email = user.email or db_user.email
     db_user.password = hashed_password or db_user.password
     db_user.name = user.name or db_user.name

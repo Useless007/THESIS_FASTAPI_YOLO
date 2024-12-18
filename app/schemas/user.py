@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Schema สำหรับการสร้าง User
 class UserCreate(BaseModel):
-    username: str
+    # username: str
     email: str
     password: str
     name: str
@@ -20,7 +20,7 @@ class UserCreate(BaseModel):
 
 # Schema สำหรับการอัปเดต User
 class UserUpdate(BaseModel):
-    username: Optional[str] = None
+    # username: Optional[str] = None
     email: Optional[str] = None
     password: Optional[str] = None
     name: Optional[str] = None
@@ -35,7 +35,7 @@ class UserUpdate(BaseModel):
 # Schema สำหรับการแสดงข้อมูล User
 class UserOut(BaseModel):
     id: int
-    username: str
+    # username: str
     email: str
     name: str
     role: str
