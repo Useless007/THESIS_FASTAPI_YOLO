@@ -7,9 +7,12 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import List
 from sqlalchemy.exc import IntegrityError
+from fastapi.responses import RedirectResponse
+from typing import Optional
 
 from app.models.user import User
 from app.database import get_db
+from app.services.auth import get_current_user
 from app.schemas.user import UserCreate, UserUpdate, UserOut
 from app.crud.user import (
     create_user,
@@ -48,25 +51,47 @@ def get_login_form(request: Request):
     """
     return templates.TemplateResponse("login.html", {"request": request})
 
-@protected_router.post("/login")
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+# TODO: ทำให้ใช้ร่่วมกับ JWT และแสดงข็อความlogout บนnavbar
+# @router.post("/login")
+@protected_router.post("/login", response_class=HTMLResponse)
+def authenticate_user_and_generate_token(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
     """
-    Endpoint สำหรับเข้าสู่ระบบและสร้าง JWT token
+    ตรวจสอบข้อมูลการเข้าสู่ระบบและส่ง Token กลับ
     """
-    # ตรวจสอบ email/password
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.password):
-        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    user = db.query(User).filter(User.email == username).first()
+    
+    if not user or not verify_password(password, user.password):
+        # หาก username หรือ password ไม่ถูกต้อง
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "message": "❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+                "message_color": "red"
+            }
+        )
 
-    # อัปเดตสถานะเป็น active
-    # update_user_status(db, user.id, True)
-
-    # สร้างและส่ง JWT token
+    # หากตรวจสอบผ่าน สร้าง Token
     access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(
+        key="Authorization",
+        value=f"Bearer {access_token}",
+        httponly=False,  # False เพื่อให้ JavaScript อ่านได้
+        secure=False,   # เปลี่ยนเป็น True บน HTTPS
+        samesite="Lax",
+        max_age=3600,
+        path="/"  # ✅ สำคัญ: ให้ Cookie มีผลกับทุกเส้นทาง
+    )
+    return response
 
 @protected_router.post("/getToken")
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def authenticate_user_and_generate_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
     Endpoint สำหรับเข้าสู่ระบบและสร้าง JWT token
     """
@@ -93,41 +118,95 @@ def get_register_form(request: Request):
 @protected_router.post("/register", response_class=HTMLResponse)
 def post_register_form(
     request: Request,
-    # username: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
     name: str = Form(...),
     db: Session = Depends(get_db),
 ):
     """
-    รับข้อมูลจากฟอร์มและสร้างผู้ใช้ใหม่ในฐานข้อมูล
+    รับข้อมูลจากฟอร์มและสร้างผู้ใช้ใหม่ในฐานข้อมูล พร้อมเข้าสู่ระบบอัตโนมัติ
     """
     user_data = UserCreate(
-        # username=username,
         email=email,
         password=password,
         name=name,
-        role="customer",  # กำหนดบทบาทเป็น customer
+        role="customer",
     )
     try:
+        # สร้างผู้ใช้ใหม่
         create_user(db=db, user=user_data)
-        message = "User registered successfully!"
-        message_color = "green"
+
+        # สร้าง JWT Token สำหรับผู้ใช้ที่ลงทะเบียนสำเร็จ
+        access_token = create_access_token(data={"sub": email})
+
+        # ตั้งค่า Cookie พร้อม Redirect ไปหน้า Home
+        response = RedirectResponse(url="/", status_code=303)
+        response.set_cookie(
+            key="Authorization",
+            value=f"Bearer {access_token}",
+            httponly=False,  # False เพื่อให้ JavaScript อ่านได้
+            secure=False,   # True ถ้าใช้ HTTPS
+            samesite="Lax",
+            max_age=3600,
+            path="/"  # ✅ สำคัญ: ให้ Cookie มีผลกับทุกเส้นทาง
+        )
+        return response
+
     except IntegrityError as e:
-        # ตรวจสอบว่าเป็น Duplicate Entry หรือไม่
         if "Duplicate entry" in str(e.orig):
-            message = "Email นี้มีอยู่ในระบบแล้ว"
+            message = "❌ Email นี้มีอยู่ในระบบแล้ว"
         else:
-            message = "Registration failed due to a database error."
+            message = "❌ Registration failed due to a database error."
         message_color = "red"
-    except Exception:
-        message = "Registration failed due to an unexpected error."
+    except Exception as e:
+        message = "❌ Registration failed due to an unexpected error."
         message_color = "red"
-    
+
     return templates.TemplateResponse(
         "register.html", 
         {"request": request, "message": message, "message_color": message_color}
     )
+    
+    
+@protected_router.get("/role-check", tags=["Auth"])
+def check_user_role(
+    role: Optional[str] = None,
+    position: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_current_user)
+):
+    
+    """
+    ตรวจสอบบทบาทและสถานะของผู้ใช้
+    - ถ้าไม่มี Token ให้ส่งสถานะเป็น Guest
+    """
+    if current_user is None:
+        return {
+            "status": "guest",
+            "message": "Guest user",
+        }
+    
+    """
+    ตรวจสอบบทบาทและตำแหน่งของผู้ใช้
+    - role: ระบุบทบาทที่ต้องการตรวจสอบ (customer, employee)
+    - position: ระบุตำแหน่งพนักงาน (admin, staff, packager)
+    """
+    if not current_user:
+        return {"status": "success", "message": "Guest user"}
+    
+    if role:
+        if current_user.role != role:
+            return {"status": "error", "message": f"Requires role: {role}"}
+    
+    if position:
+        if current_user.position != position:
+            return {"status": "error", "message": f"Requires position: {position}"}
+    
+    return {
+        "status": "success",
+        "role": current_user.role,
+        "position": current_user.position,
+        "is_active": current_user.is_active
+    }
 
 # ---------------------------------------------------------------------
 # PUBLIC USER ENDPOINTS

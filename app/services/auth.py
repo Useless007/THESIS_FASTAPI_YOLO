@@ -3,15 +3,17 @@
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
+from jwt import PyJWTError as JWTError
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, Cookie, Header, Request
 from fastapi.security import OAuth2PasswordBearer
 from app.database import get_db
 from app.models.user import User
 from app.config import settings
+from typing import Optional
 
 # กำหนด OAuth2 scheme เพื่อใช้ในการดึง token
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="getToken")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/getToken")
 
 # ฟังก์ชันสำหรับแฮชรหัสผ่าน
 def hash_password(password: str) -> str:
@@ -34,28 +36,185 @@ def create_access_token(data: dict, expires_delta: timedelta = timedelta(hours=1
 # ฟังก์ชันตรวจสอบ JWT Token
 def verify_token(token: str):
     try:
+        print("🔍 Raw Token:", token)
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=settings.ALGORITHM)
+        print("✅ Token Payload:", payload)
         return payload
     except jwt.ExpiredSignatureError:
+        print("❌ Token has expired")
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:
+        print("❌ Invalid Token")
         raise HTTPException(status_code=401, detail="Invalid token")
-    
+
+  
 
 # ฟังก์ชันสำหรับดึงผู้ใช้ปัจจุบันจาก token
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    payload = verify_token(token)  # ใช้ verify_token ในการตรวจสอบ token
-    email = payload.get("sub")
+# def get_current_user(
+#     token: Optional[str] = Cookie(None),
+#     authorization: Optional[str] = Header(None),
+#     db: Session = Depends(get_db)
+# ):
+#     print(f"🍪 Token from Cookie: {token}")
+#     print(f"🔑 Token from Header: {authorization}")
+
+#     # ตรวจสอบ Token จาก Header ก่อน ถ้าไม่มีให้ตรวจสอบจาก Cookie
     
-    if email is None:
-        raise HTTPException(status_code=401, detail="Invalid token payload")
+#     if authorization:
+#         token = authorization.replace("Bearer ", "").strip('"')
+#     elif token:
+#         token = token.replace("Bearer ", "").strip('"')
+#     else:
+#         print(f"🔑 Token is missing")
+#         return None
     
-    user = db.query(User).filter(User.email == email).first()
+#     try:
+#         print(f"🛡️ Final Token: {token}")
+#         payload = verify_token(token)
+#         email = payload.get("sub")
+#         print(f"📧 User Email from Token: {email}")
+        
+#         if email is None:
+#             raise HTTPException(status_code=401, detail="Invalid token payload")
+        
+#         user = db.query(User).filter(User.email == email).first()
+#         if user is None:
+#             raise HTTPException(status_code=401, detail="User not found")
+        
+#         print(f"✅ Authenticated User: {user.email}")
+#         return user
+
+#     except jwt.ExpiredSignatureError:
+#         print("❌ Token has expired")
+#         raise HTTPException(status_code=401, detail="Token has expired")
+#     except jwt.InvalidTokenError:
+#         print("❌ Invalid Token")
+#         raise HTTPException(status_code=401, detail="Invalid token")
+
+# def get_current_user(
+#     token: Optional[str] = Cookie(None),
+#     authorization: Optional[str] = Header(None),
+#     db: Session = Depends(get_db)
+# ):
+#     print(f"🍪 Token from Cookie: {token}")
+#     print(f"🔑 Token from Header: {authorization}")
+
+#     final_token = None
     
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not authenticated")
+#     # ตรวจสอบ Token จาก Header ก่อน
+#     if authorization and authorization.startswith("Bearer "):
+#         final_token = authorization.replace("Bearer ", "").strip('"')
+#     elif token and token.startswith("Bearer "):
+#         final_token = token.replace("Bearer ", "").strip('"')
+#     else:
+#         print("🔑 Token is missing")
+#         return None
+
+#     try:
+#         print(f"🛡️ Final Token: {final_token}")
+#         payload = jwt.decode(final_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+#         email = payload.get("sub")
+#         print(f"📧 User Email from Token: {email}")
+
+#         if email is None:
+#             raise HTTPException(status_code=401, detail="Invalid token payload")
+        
+#         user = db.query(User).filter(User.email == email).first()
+#         if user is None:
+#             raise HTTPException(status_code=401, detail="User not found")
+        
+#         print(f"✅ Authenticated User: {user.email}")
+#         return user
+
+#     except jwt.ExpiredSignatureError:
+#         print("❌ Token has expired")
+#         raise HTTPException(status_code=401, detail="Token has expired")
+#     except jwt.InvalidTokenError as e:
+#         print(f"❌ Invalid Token: {str(e)}")
+#         raise HTTPException(status_code=401, detail="Invalid token")
+
+# def get_current_user(
+#     token: str = Depends(oauth2_scheme),
+#     authorization: Optional[str] = Cookie(None),  # เปลี่ยนเป็น Authorization
+#     db: Session = Depends(get_db)
+# ):
+#     payload = verify_token(token)
+#     email = payload.get("sub")
     
-    return user  # คืนค่า user ถ้า authenticated แล้ว
+#     if email is None:
+#         raise HTTPException(status_code=401, detail="Invalid token payload")
+    
+#     user = db.query(User).filter(User.email == email).first()
+#     if user is None:
+#         raise HTTPException(status_code=401, detail="User not found")
+    
+    
+#     print(f"🔑 Token from Header: {token}")
+#     print(f"🍪 Token from Cookie: {authorization}")
+
+#     if not authorization and not token:
+#         raise HTTPException(status_code=401, detail="Token is missing from Cookie")
+
+#     try:
+#         if authorization:
+#         # ตรวจสอบและลบ "Bearer" ออก
+#             if authorization.startswith("Bearer "):
+#                 token = authorization.replace("Bearer ", "").strip('"')
+#             else:
+#                 raise HTTPException(status_code=401, detail="Invalid token format in Cookie")
+
+#             print(f"🛡️ Final Token: {token}")
+#             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+#             email = payload.get("sub")
+#             print(f"📧 User Email from Token: {email}")
+
+#             if email is None:
+#                 raise HTTPException(status_code=401, detail="Invalid token payload")
+            
+#             user = db.query(User).filter(User.email == email).first()
+#             if user is None:
+#                 raise HTTPException(status_code=401, detail="User not found")
+            
+#             print(f"✅ Authenticated User: {user.email}")
+#             return user
+        
+#         else:
+#             return None
+
+#     except jwt.ExpiredSignatureError:
+#         print("❌ Token has expired")
+#         raise HTTPException(status_code=401, detail="Token has expired")
+#     except jwt.InvalidTokenError as e:
+#         print(f"❌ Invalid Token: {str(e)}")
+#         raise HTTPException(status_code=401, detail="Invalid token")
+
+def get_current_user(request: Request, db: Session = Depends(get_db)):
+    # ✅ ดึง Token จาก Cookie
+    token = request.cookies.get("Authorization")
+    if not token:
+        # raise HTTPException(status_code=401, detail="Token not found in cookies")
+        return None
+    
+    try:
+        # ✅ ตรวจสอบ Token และลบ "Bearer "
+        if token.startswith("Bearer "):
+            token = token.split(" ")[1]
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        
+        # ✅ ดึง Email จาก Token
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # ✅ ดึง User จากฐานข้อมูล
+        user = db.query(User).filter(User.email == email).first()
+        if user is None:
+            raise HTTPException(status_code=401, detail="User not found")
+        
+        return user  # ✅ คืนค่าเป็น Object ของ User
+    
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 
 # ฟังก์ชันสำหรับตรวจสอบบทบาทของผู้ใช้
@@ -88,6 +247,11 @@ def get_user_with_role_and_position(required_role: str, required_position: str):
 # ฟังก์ชันสำหรับตรวจสอบบทบาท ตำแหน่ง และสถานะการใช้งานของผู้ใช้
 def get_user_with_role_and_position_and_isActive(required_role: str, required_position: str):
     def role_position_and_active_checker(current_user: User = Depends(get_current_user)):
+        if not current_user:
+            raise HTTPException(
+                status_code=401,
+                detail="User authentication failed"
+            )
         if current_user.role != required_role:
             raise HTTPException(
                 status_code=403,

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Admin Dashboard</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+</head>
+
+<body class="bg-gray-100">
+    <nav class="bg-white shadow-md p-4">
+        <div class="max-w-screen-xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">👑 Admin Dashboard</h1>
+            <a href="/" class="text-blue-500 hover:underline">กลับสู่หน้าแรก</a>
+        </div>
+    </nav>
+
+    <main class="p-8">
+        <h2 class="text-2xl font-bold mb-4">สรุปข้อมูลระบบ</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="font-bold text-gray-700">จำนวนผู้ใช้</h3>
+                <p id="user-count" class="text-2xl">0</p>
+            </div>
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="font-bold text-gray-700">ยอดขายวันนี้</h3>
+                <p id="sales-today" class="text-2xl">$0</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- <script>
+        fetch('/admin/dashboard-data', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('user-count').textContent = data.user_count;
+            document.getElementById('sales-today').textContent = `$${data.sales_today}`;
+        })
+        .catch(error => console.error('❌ Error loading dashboard data:', error));
+    </script> -->
+</body>
+
+</html>
