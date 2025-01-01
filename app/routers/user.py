@@ -36,6 +36,7 @@ templates = Jinja2Templates(directory="app/templates")
 # ตั้งค่า Routers
 router = APIRouter(prefix="/users", tags=["Users"])
 admin_router = APIRouter(
+    prefix="/admin",
     tags=["Admin"],
     dependencies=[Depends(get_user_with_role_and_position("employee", "admin"))],
 )
@@ -188,7 +189,7 @@ def check_user_role(
     """
     ตรวจสอบบทบาทและตำแหน่งของผู้ใช้
     - role: ระบุบทบาทที่ต้องการตรวจสอบ (customer, employee)
-    - position: ระบุตำแหน่งพนักงาน (admin, staff, packager)
+    - position: ระบุตำแหน่งพนักงาน (admin, preparation staff, packing staff)
     """
     if not current_user:
         return {"status": "success", "message": "Guest user"}

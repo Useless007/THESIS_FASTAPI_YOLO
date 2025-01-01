@@ -1,5 +1,6 @@
 # app/services/auth.py
 
+
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
@@ -246,12 +247,13 @@ def get_user_with_role_and_position(required_role: str, required_position: str):
 
 # ฟังก์ชันสำหรับตรวจสอบบทบาท ตำแหน่ง และสถานะการใช้งานของผู้ใช้
 def get_user_with_role_and_position_and_isActive(required_role: str, required_position: str):
-    def role_position_and_active_checker(current_user: User = Depends(get_current_user)):
+    def role_position_and_active_checker(current_user: User = Depends(get_current_user),request: Request = None):
         if not current_user:
             raise HTTPException(
                 status_code=401,
                 detail="User authentication failed"
             )
+
         if current_user.role != required_role:
             raise HTTPException(
                 status_code=403,
