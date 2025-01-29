@@ -8,7 +8,6 @@ load_dotenv()
 
 class Settings:
     # Database configuration
-    DATABASE_URL: str = os.getenv("DATABASE_URL")
     DATABASE_USERNAME: str = os.getenv("DATABASE_USERNAME")
     DATABASE_PASSWORD: str = os.getenv("DATABASE_PASSWORD")
     DATABASE_HOST: str = os.getenv("DATABASE_HOST", "localhost")

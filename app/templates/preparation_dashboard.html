@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preparation Staff Dashboard</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
+</head>
+
+<body class="bg-gray-100">
+    <nav class="bg-white shadow-md p-4">
+        <div class="max-w-screen-xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">🛠️ Preparation Staff Dashboard</h1>
+            <a href="/" class="text-blue-500 hover:underline">กลับสู่หน้าแรก</a>
+        </div>
+    </nav>
+
+    <main class="p-4 md:p-8">
+        <div class="max-w-full mx-auto py-6">
+            <h2 class="text-2xl font-bold mb-6 text-center">📦 รายการคำสั่งซื้อที่รอการตรวจสอบ</h2>
+
+            <div class="bg-white shadow-md rounded-lg overflow-x-auto">
+                <table class="w-full text-sm text-center border-collapse border border-gray-200">
+                    <thead>
+                        <tr class="bg-gray-200 text-gray-600 uppercase text-xs font-semibold">
+                            <th class="py-3 px-5 border">Order ID</th>
+                            <th class="py-3 px-5 border">Email</th>
+                            <th class="py-3 px-5 border">Total</th>
+                            <th class="py-3 px-5 border">Date</th>
+                            <th class="py-3 px-5 border">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orders-table" class="divide-y divide-gray-200">
+                        <!-- Orders will be loaded here dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal สำหรับแสดงรายละเอียดคำสั่งซื้อ -->
+    <div id="orderDetailsModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center">
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full">
+            <h3 class="text-xl font-bold mb-4">📑 รายละเอียดคำสั่งซื้อ</h3>
+            <p><strong>Order ID:</strong> <span id="modal-order-id"></span></p>
+            <p><strong>Email:</strong> <span id="modal-order-email"></span></p>
+            <p><strong>Total:</strong> ฿<span id="modal-order-total"></span></p>
+            <p><strong>Date:</strong> <span id="modal-order-date"></span></p>
+            <h4 class="font-bold mt-4">📋 รายการสินค้า:</h4>
+            <ul id="modal-order-items" class="list-disc pl-5 mt-2">
+                <!-- รายการสินค้าจะถูกเพิ่มที่นี่ -->
+            </ul>
+            <div class="mt-6 flex justify-end space-x-2">
+                <button onclick="closeOrderModal()" class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // โหลดคำสั่งซื้อที่มีสถานะ confirmed
+        function loadConfirmedOrders() {
+            fetch('/preparation/orders/confirmed', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    const table = document.getElementById('orders-table');
+                    table.innerHTML = '';
+                    data.forEach(order => {
+                        table.innerHTML += `
+                        <tr class="hover:bg-gray-100">
+                            <td class="py-3 px-5 border">${order.id}</td>
+                            <td class="py-3 px-5 border">${order.email}</td>
+                            <td class="py-3 px-5 border">฿${order.total}</td>
+                            <td class="py-3 px-5 border">${new Date(order.created_at).toLocaleDateString()}</td>
+                            <td class="py-3 px-5 border">
+                                <button onclick="viewOrderDetails(${order.id})" class="bg-blue-500 text-white px-3 py-1 rounded-md hover:bg-blue-600 shadow-md">🔍 ดูรายละเอียด</button>
+                                <button onclick="approveOrder(${order.id})" class="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600 shadow-md">✔ ยืนยัน</button>
+                                <button onclick="cancelOrder(${order.id})" class="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600 shadow-md">❌ ยกเลิก</button>
+                            </td>
+                        </tr>
+                    `;
+                    });
+                })
+                .catch(error => {
+                    console.error('❌ Error fetching orders:', error);
+                });
+        }
+
+        // ดูรายละเอียดคำสั่งซื้อ
+        function viewOrderDetails(orderId) {
+            fetch(`/preparation/orders/${orderId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('modal-order-id').textContent = data.id;
+                    document.getElementById('modal-order-email').textContent = data.email;
+                    document.getElementById('modal-order-total').textContent = data.total;
+                    document.getElementById('modal-order-date').textContent = new Date(data.created_at).toLocaleDateString();
+
+                    const itemsList = document.getElementById('modal-order-items');
+                    itemsList.innerHTML = '';
+                    data.items.forEach(item => {
+                        itemsList.innerHTML += `<li>${item.name} (x${item.quantity}) - ฿${item.price}</li>`;
+                    });
+
+                    document.getElementById('orderDetailsModal').classList.remove('hidden');
+                })
+                .catch(error => {
+                    console.error('❌ Error fetching order details:', error);
+                });
+        }
+
+        function closeOrderModal() {
+            document.getElementById('orderDetailsModal').classList.add('hidden');
+        }
+
+        document.addEventListener('DOMContentLoaded', loadConfirmedOrders);
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
+</body>
+
+</html>

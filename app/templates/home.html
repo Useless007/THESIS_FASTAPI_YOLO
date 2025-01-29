@@ -111,11 +111,20 @@
                 if (
                     data.status === 'success' &&
                     data.role === 'employee' &&
-                    data.position === 'admin' &&
                     data.is_active === true
                 ) {
-                    document.getElementById('admin-dashboard').classList.remove('hidden');
-                    console.log('✅ Admin Dashboard Visible');
+
+                    if (data.position === 'packing staff') {
+                        document.getElementById('packing-dashboard').classList.remove('hidden');
+                        console.log('✅ Packing Dashboard Visible');
+                    } else if (data.position === 'preparation staff') {
+                        document.getElementById('preparation-dashboard').classList.remove('hidden');
+                        console.log('✅ Preparation Dashboard Visible');
+                    } else if (data.position === 'admin') {
+                        document.getElementById('admin-dashboard').classList.remove('hidden');
+                        console.log('✅ Admin Dashboard Visible');
+                    }
+
                 } else {
                     document.getElementById('admin-dashboard').classList.add('hidden');
                     console.log('❌ Admin Dashboard Hidden');
@@ -170,6 +179,18 @@
                                 แดชบอร์ดแอดมิน
                             </a>
                         </li>
+                        <li id="packing-dashboard" class="hidden">
+                            <a href="/admin/dashboard"
+                                class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-200 dark:hover:text-white">
+                                แดชบอร์ดพนักงานแพ็คสินค้า
+                            </a>
+                        </li>
+                        <li id="preparation-dashboard" class="hidden">
+                            <a href="/admin/dashboard"
+                                class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-200 dark:hover:text-white">
+                                แดชบอร์ดพนักงานจัดเตรียมสินค้า
+                            </a>
+                        </li>
 
                         <li>
                             <a href="/cart"
@@ -215,7 +236,7 @@
                             aria-current="page">หน้าแรก</a>
                     </li>
                     <li>
-                        <a href="#"
+                        <a href="/my-orders"
                             class="block py-2 px-3 text-gray-900 rounded hover:bg-gray-100 md:hover:bg-transparent md:hover:text-blue-700 md:p-0 dark:text-white md:dark:hover:text-blue-500 dark:hover:bg-gray-700 dark:hover:text-white md:dark:hover:bg-transparent dark:border-gray-700">คำสั่งซื้อ</a>
                     </li>
                     <li>
@@ -563,7 +584,7 @@
                     <!-- Add more cards as needed -->
                     <div class="bg-white rounded-lg shadow p-4" data-category="arduino" data-id="14" data-name="Arducam"
                         data-price="45.99">
-                        <img src="https://as2.ftcdn.net/jpg/00/73/00/39/1000_F_73003953_DVFZYwH4iXxOlsNSVqljeqkNBg6xIUDM.jpg"
+                        <img src="https://ae-pic-a1.aliexpress-media.com/kf/S8c91beba8dd24d2296dd62580bcf8609J.jpg_960x960q75.jpg_.avif"
                             alt="Product" class="rounded-lg mb-4">
                         <h3 class="text-lg font-semibold text-gray-800">Arducam</h3>
                         <p class="text-gray-600 text-sm">บอร์ด Raspberry Pi รุ่นล่าสุด พร้อม RAM 4GB</p>

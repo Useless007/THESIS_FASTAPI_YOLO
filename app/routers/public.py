@@ -1,14 +1,26 @@
 # app/routers/public.py
 
-from fastapi import APIRouter, Request, Depends,HTTPException
+import json
+
+from fastapi import APIRouter, Request, Depends,HTTPException, File, UploadFile, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional,Dict
+
+from sqlalchemy.orm import Session
+
+import os
+from app.database import get_db
 from app.services.auth import get_current_user
+from app.models.order import Order
 from app.schemas.user import UserOut
 
 # เพิ่ม Jinja2 Templates
 templates = Jinja2Templates(directory="app/templates")
+
+# กำหนดโฟลเดอร์สำหรับเก็บสลิป
+UPLOAD_DIR = "uploads/payment_slips"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 router = APIRouter(tags=["HTML"])
 
@@ -45,26 +57,69 @@ def get_cart_page(
         {"request": request, "current_user": current_user}
     )
 
-@router.post("/checkout", response_class=HTMLResponse)
-async def print_debug(cart: Dict):
+@router.post("/checkout", response_class=JSONResponse)
+async def checkout(
+    cart: str = Form(...),  # รับ cart เป็น JSON string จาก FormData
+    payment_slip: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[UserOut] = Depends(get_current_user)
+):
     """
-    พิมพ์ข้อมูลตะกร้าสินค้าที่ลูกค้าสั่งซื้อ
+    สั่งซื้อสินค้า พร้อมแนบสลิปการโอนเงิน และบันทึกในฐานข้อมูล
     """
-    if not cart.get('cart') or cart.get('cart_total') == 0:
+    if not current_user:
+        raise HTTPException(status_code=401, detail="❌ คุณต้องล็อกอินก่อนทำการสั่งซื้อ")
+
+    try:
+        cart_data = json.loads(cart)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"❌ ไม่สามารถอ่านข้อมูลตะกร้าได้: {str(e)}")
+
+    if not cart_data.get('cart') or cart_data.get('cart_total') == 0:
         raise HTTPException(status_code=400, detail="❌ ตะกร้าสินค้าว่างเปล่า")
 
-    print("🛒 **ข้อมูลตะกร้าสินค้าจากลูกค้า:**")
-    for item in cart.get('cart', []):
-        print(f"- สินค้า: {item['name']} | จำนวน: {item['quantity']} | รวม: ฿{item['total']}")
+    # ตรวจสอบไฟล์สลิปการโอนเงิน
+    if payment_slip.content_type not in ["image/jpeg", "image/png"]:
+        raise HTTPException(status_code=400, detail="❌ อัปโหลดได้เฉพาะไฟล์ .jpg, .jpeg หรือ .png เท่านั้น")
 
-    print(f"💵 ราคารวมทั้งหมด: ฿{cart.get('cart_total')}")
+    if payment_slip.size > 15 * 1024 * 1024:  # 15MB
+        raise HTTPException(status_code=400, detail="❌ ขนาดไฟล์ต้องไม่เกิน 15MB")
+
+    # บันทึกไฟล์สลิปการโอนเงิน
+    slip_filename = f"{current_user.email}_{payment_slip.filename}"
+    slip_path = os.path.join(UPLOAD_DIR, slip_filename)
+
+    with open(slip_path, "wb") as buffer:
+        buffer.write(await payment_slip.read())
+
+    # บันทึก JSON ด้วย double quotes
+    cart_json = json.dumps(cart_data['cart'], ensure_ascii=False)
+
+    # สร้างรายการออเดอร์ใหม่
+    new_order = Order(
+        email=current_user.email,
+        item=cart_json,
+        total=cart_data['cart_total'],
+        status="pending",
+        slip_path=slip_path
+    )
+
+    db.add(new_order)
+    db.commit()
+    db.refresh(new_order)
+
+    print("🛒 **บันทึกออเดอร์ใหม่ในฐานข้อมูล**")
+    print(f"📧 อีเมลผู้สั่งซื้อ: {current_user.email}")
+    print(f"💵 ราคารวมทั้งหมด: ฿{cart_data['cart_total']}")
+    print(f"🖼️ สลิปการโอนเงิน: {slip_path}")
 
     return JSONResponse(content={
         "message": "✅ สั่งซื้อสำเร็จ!",
-        "order_id": "ORD12345",
-        "cart_total": cart.get('cart_total')
+        "order_id": new_order.order_id,
+        "user_email": current_user.email,
+        "cart_total": cart_data['cart_total'],
+        "slip_path": slip_path
     })
-
 
 @router.get("/logout", response_class=RedirectResponse)
 def logout():
@@ -74,3 +129,18 @@ def logout():
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie("Authorization")
     return response
+
+
+@router.get("/my-orders", response_class=HTMLResponse)
+def get_my_orders_page(
+    request: Request,
+    current_user: Optional[UserOut] = Depends(get_current_user)
+):
+    """
+    แสดงหน้าคำสั่งซื้อของฉัน
+    """
+    return templates.TemplateResponse(
+        "my_orders.html",
+        {"request": request, "current_user": current_user}
+    )
+

@@ -1,3 +1,5 @@
+<!-- app/templates/cart.html -->
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -89,6 +91,15 @@
                     class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">ชำระเงิน</button>
             </div>
         </div>
+
+        <!-- อัปโหลดสลิปการโอนเงิน -->
+        <div class="mt-8">
+            <h2 class="text-xl font-semibold mb-4">📎 แนบสลิปการโอนเงิน</h2>
+            <input type="file" id="payment-slip" accept="image/png, image/jpeg"
+                class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none" />
+            <p class="mt-2 text-sm text-gray-500">ไฟล์ต้องเป็นรูปภาพ (JPG, PNG) และมีขนาดไม่เกิน 15MB</p>
+        </div>
+
     </div>
 
     <!-- Footer -->
@@ -151,33 +162,60 @@
             displayCart();
         }
 
-        // ชำระเงิน
+        // ฟังก์ชันชำระเงิน
         function checkout() {
             let cart = JSON.parse(localStorage.getItem('cart')) || { cart: [], cart_total: 0 };
+            let paymentSlip = document.getElementById('payment-slip').files[0];
 
-            if (cart.cart.length === 0) {
-                alert('❌ ตะกร้าสินค้าว่างเปล่า');
+            if (!paymentSlip) {
+                alert('❌ กรุณาแนบสลิปการโอนเงิน');
                 return;
             }
+
+            if (paymentSlip.size > 15 * 1024 * 1024) {
+                alert('❌ ขนาดไฟล์เกิน 15MB');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('cart', JSON.stringify(cart)); // ส่งตะกร้าเป็น JSON string
+            formData.append('payment_slip', paymentSlip);
+
+            // ดึง Token จาก Cookie
+            const cookies = document.cookie.split('; ').reduce((acc, cookie) => {
+                const [name, value] = cookie.split('=');
+                acc[name] = value;
+                return acc;
+            }, {});
+
+            const token = cookies['Authorization'] ? cookies['Authorization'].replace('Bearer ', '') : null;
 
             fetch('/checkout', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : ''
                 },
-                body: JSON.stringify(cart)
+                body: formData
             })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('❌ ชำระเงินไม่สำเร็จ');
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     console.log('✅ Checkout Success:', data);
+                    alert(`✅ ชำระเงินสำเร็จ!\nอีเมลผู้สั่งซื้อ: ${data.user_email}\nราคารวม: ฿${data.cart_total}`);
                     localStorage.removeItem('cart');
-                    alert('✅ ชำระเงินสำเร็จ!');
                     displayCart();
+                    window.location.href = '/'; // ไปยังหน้าแรกหลังจากชำระเงินสำเร็จ
                 })
                 .catch(error => {
                     console.error('❌ Checkout Error:', error);
+                    alert('❌ ชำระเงินไม่สำเร็จ');
                 });
         }
+
 
         displayCart();
     </script>

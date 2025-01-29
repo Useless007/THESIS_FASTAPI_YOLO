@@ -6,6 +6,7 @@ from app.database import Base, engine
 from app.models.product import Product
 # from app.models.employee import Employee
 from app.models.user import User
+from app.models.order import Order
 
 # สร้างตารางทั้งหมดในฐานข้อมูล
 Base.metadata.create_all(bind=engine)

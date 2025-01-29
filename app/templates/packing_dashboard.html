@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Packing Staff Camera Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
+    <style>
+        #stream {
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            width: 640px;
+            height: 480px;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        #detection-list {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .captured-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .captured-image-wrapper {
+            position: relative;
+            cursor: pointer;
+            max-width: 300px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .captured-image-wrapper img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        .modal-content {
+            margin: 5% auto;
+            display: block;
+            max-width: 80%;
+            max-height: 80%;
+        }
+
+        .modal img {
+            width: 100%;
+            height: auto;
+        }
+
+        .close {
+            position: absolute;
+            top: 20px;
+            right: 35px;
+            color: white;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100">
+    <nav class="bg-white shadow-md p-4">
+        <div class="max-w-screen-xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">📷 Packing Staff Camera Dashboard (YOLOv10)</h1>
+            <a href="/" class="text-blue-500 hover:underline">กลับสู่หน้าแรก</a>
+        </div>
+    </nav>
+
+    <main class="p-8 text-center">
+        <h2 class="text-2xl font-bold mb-6">🔍 ตรวจจับสินค้าในภาพด้วย YOLOv10 ผ่านกล้อง</h2>
+
+        <!-- Streaming Video -->
+        <div class="flex justify-center mb-4">
+            <img id="stream" src="" alt="Video Stream">
+        </div>
+
+        <!-- Controls -->
+        <div class="flex justify-center space-x-4 mb-4">
+            <button id="start-camera" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">📸
+                เปิดกล้อง</button>
+            <button id="stop-camera" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600" disabled>🛑
+                ปิดกล้อง</button>
+            <button id="capture" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600" disabled>📷
+                ถ่ายภาพ</button>
+        </div>
+
+        <!-- Detection Results -->
+        <h3 class="text-lg font-bold mt-4">📋 รายการสิ่งที่ตรวจพบ:</h3>
+        <div id="detection-list" class="bg-white shadow-md text-gray-700"></div>
+
+        <!-- Captured Image -->
+        <h3 class="text-lg font-bold mt-4">🖼️ ภาพที่ถ่ายได้:</h3>
+        <div class="captured-container">
+            <div class="captured-image-wrapper" id="captured-wrapper">
+                <img id="captured-image" src="" alt="Captured Image" class="hidden">
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal สำหรับแสดงภาพขยาย -->
+    <div id="image-modal" class="modal">
+        <span class="close" id="close-modal">&times;</span>
+        <img class="modal-content" id="modal-image">
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const stream = document.getElementById('stream');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const detectionList = document.getElementById('detection-list');
+        const capturedImage = document.getElementById('captured-image');
+        const startCameraBtn = document.getElementById('start-camera');
+        const stopCameraBtn = document.getElementById('stop-camera');
+        const captureBtn = document.getElementById('capture');
+        const modal = document.getElementById('image-modal');
+        const modalImg = document.getElementById('modal-image');
+        const closeModal = document.getElementById('close-modal');
+
+        // ✅ เปิดกล้อง
+        startCameraBtn.addEventListener('click', () => {
+            stream.crossOrigin = "anonymous";
+            stream.src = "http://localhost:8001/packing/stream";
+            startCameraBtn.disabled = true;
+            stopCameraBtn.disabled = false;
+            captureBtn.disabled = false;
+        });
+
+        // ✅ ปิดกล้อง
+        stopCameraBtn.addEventListener('click', () => {
+            stream.src = "";
+            startCameraBtn.disabled = false;
+            stopCameraBtn.disabled = true;
+            captureBtn.disabled = true;
+
+            test = async () => fetch('http://localhost:8001/packing/stop-stream', {
+                method: 'GET'
+            });
+
+            test();
+
+
+
+        });
+
+        // ✅ ถ่ายภาพ
+        captureBtn.addEventListener('click', async () => {
+            canvas.width = 640;
+            canvas.height = 480;
+            ctx.drawImage(stream, 0, 0, canvas.width, canvas.height);
+
+            console.log("Before get image blob");
+
+            const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            const formData = new FormData();
+            formData.append('file', imageBlob, 'captured_image.png');
+
+            try {
+                // ✅ ดึง Authorization Token
+                const token = document.cookie
+                    .split('; ')
+                    .find(row => row.startsWith('Authorization='))
+                    ?.split('=')[1];
+
+                if (!token) {
+                    throw new Error('❌ No Authorization Token Found');
+                }
+
+                // ✅ ส่งภาพไปยัง Backend
+                console.log("Sending request to backend");
+                const response = await fetch('http://localhost:8001/packing/detect', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`❌ Server responded with ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                console.log(result);
+
+                // ล้างลิสต์การตรวจจับเก่า
+                detectionList.innerHTML = "";
+
+                if (result.detections.length > 0) {
+                    result.detections.forEach(det => {
+                        const [x1, y1, x2, y2] = det.box;
+                        const listItem = document.createElement('div');
+                        listItem.innerHTML = `<strong>${det.label}</strong> - ความมั่นใจ: ${(det.confidence * 100).toFixed(1)}%`;
+                        detectionList.appendChild(listItem);
+                    });
+                } else {
+                    detectionList.innerHTML = `<div class="text-red-500 font-semibold">❌ AI ไม่สามารถตรวจจับสินค้าได้</div>`;
+                }
+
+                // แสดงภาพที่ถ่าย
+                const imgURL = URL.createObjectURL(imageBlob);
+                capturedImage.src = imgURL;
+                capturedImage.classList.remove('hidden');
+
+                // คลิกเพื่อดู Modal
+                capturedImage.onclick = () => {
+                    modal.style.display = "block";
+                    modalImg.src = capturedImage.src;
+                };
+
+            } catch (error) {
+                console.error('❌ Error detecting objects:', error.message);
+                detectionList.innerHTML = `<div class="text-red-500 font-semibold">${error.message}</div>`;
+            }
+        });
+
+
+
+        // ✅ ปิด Modal
+        closeModal.onclick = () => {
+            modal.style.display = "none";
+        };
+    </script>
+</body>
+
+</html>

@@ -78,19 +78,35 @@
 - ดู **รายงานสรุปผลการตรวจสอบสินค้ารายวัน**
 - สามารถสมัครบัญชี แต่ยังไม่สามารถเปิดใช้งานได้จนกว่าผู้ดูแลจะอนุมัติ
 
-
-
 # **ในส่วนของCommandต่างๆจะมีดังนี้**
 
+### command for Anaconda Environtment import
+
+```python
+conda create --name <env> --file req-conda.txt
+```
+
+### command for init-database.py
+
+```python
+python -m init_db
+```
 
 ### command for dbtest.py
 
 ```python
-python -m pytest -v .\test\dbtest.py 
+python -m pytest -v .\test\dbtest.py
 ```
 
 ### command for main.py
 
 ```python
-uvicorn app.main:app --reload 
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
 ```
+
+### command for server_packing.py
+
+```python
+uvicorn app.server_packing:app --host 0.0.0.0 --port 8001 --reload --log-level debug
+```
+

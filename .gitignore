@@ -1,5 +1,7 @@
 # .gitignore
 
+uploads/
+*.pdf
 Todo.md
 
 # Byte-compiled / optimized / DLL files

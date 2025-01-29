@@ -1,4 +1,4 @@
-from fastapi import Request
+from fastapi import Request,HTTPException
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -54,7 +54,7 @@ class ExceptionLoggingMiddleware(BaseHTTPMiddleware):
             raise http_exc
         except Exception as exc:
             logger.error(f"🔥 Unhandled Exception: {request.client.host} | {request.method} {request.url} | {str(exc)}")
-            raise HTTPException(status_code=500, detail="Internal Server Error")
+            raise HTTPException(status_code=401, detail="Unauthorized: Please log in first")
 
 class AuthRedirectMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
@@ -64,5 +64,9 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
         if response.status_code == 401:
             print("🔄 Redirecting to /login due to unauthorized access.")
             return RedirectResponse(url="/login")
-        
+
+        if response.status_code == 404:
+            print("🔄 Redirecting to 404 due to 404.")
+            return RedirectResponse(url="/page_not_found")
+
         return response

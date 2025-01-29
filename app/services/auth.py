@@ -190,32 +190,48 @@ def verify_token(token: str):
 #         raise HTTPException(status_code=401, detail="Invalid token")
 
 def get_current_user(request: Request, db: Session = Depends(get_db)):
-    # ✅ ดึง Token จาก Cookie
-    token = request.cookies.get("Authorization")
+    # ✅ ดึง Token จาก Cookie หรือ Header
+    token = request.cookies.get("Authorization") or request.headers.get("Authorization")
     if not token:
-        # raise HTTPException(status_code=401, detail="Token not found in cookies")
         return None
-    
+
+    print(f"🔑 Raw Token from get_current_user: {token}")
+
     try:
-        # ✅ ตรวจสอบ Token และลบ "Bearer "
-        if token.startswith("Bearer "):
-            token = token.split(" ")[1]
+        # ✅ ลบ "Bearer " และ " หรือช่องว่างที่ไม่ต้องการ
+        token = token.replace("Bearer ", "").strip().strip('"')
+
+        # ✅ ตรวจสอบว่ามีค่า Token หรือไม่หลังประมวลผล
+        if not token:
+            raise HTTPException(status_code=401, detail="Token is empty after processing")
+
+        print(f"🛡️ Processed Token: {token}")
+
+        # ✅ ถอดรหัส JWT Token
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        
+
         # ✅ ดึง Email จาก Token
         email: str = payload.get("sub")
         if email is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
+            raise HTTPException(status_code=401, detail="Invalid token payload: 'sub' not found")
+
         # ✅ ดึง User จากฐานข้อมูล
         user = db.query(User).filter(User.email == email).first()
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
-        
+
+        print(f"✅ Authenticated User: {user.email}")
         return user  # ✅ คืนค่าเป็น Object ของ User
-    
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+
+    except jwt.ExpiredSignatureError:
+        print("❌ Token has expired")
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError as e:
+        print(f"❌ Invalid Token: {str(e)}")
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+
+
+
 
 
 # ฟังก์ชันสำหรับตรวจสอบบทบาทของผู้ใช้

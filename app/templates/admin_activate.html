@@ -2,129 +2,236 @@
 
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <title>Activate Management</title>
-    <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
-  </head>
 
-  <body class="bg-gray-100">
-    <nav class="bg-white shadow-md p-4">
-      <div class="max-w-screen-xl mx-auto flex justify-between items-center">
-        <a href="/admin/dashboard" class="text-xl font-bold"
-          >👑 Activate Management</a
-        >
-        <a href="/" class="text-blue-500 hover:underline">กลับสู่หน้าแรก</a>
-      </div>
-    </nav>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <title>Activate Management</title>
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
 
-    <main class="p-8">
-      <div class="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
-        <div class="mx-auto max-w-none">
-          <h1 class="text-5xl font-bold text-center">Activate Management</h1>
+  <style>
+    #user-list li.no-users {
+      text-align: center;
+      color: #6b7280; /* สีเทา Tailwind */
+      font-size: 1rem;
+      padding: 1rem;
+  }
+  
+  </style>
+</head>
 
-          <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg mt-10">
-            <ul
-              role="list"
-              class="divide-y divide-gray-200 opacity-100"
-              id="user-list"
-            >
-              <!-- รายการผู้ใช้จะถูกเพิ่มที่นี่โดย jQuery -->
-            </ul>
-          </div>
+<body class="bg-gray-100">
+  <nav class="bg-white shadow-md p-4">
+    <div class="max-w-screen-xl mx-auto flex justify-between items-center">
+      <a href="/admin/dashboard" class="text-xl font-bold">👑 Activate Management</a>
+      <a href="/" class="text-blue-500 hover:underline">กลับสู่หน้าแรก</a>
+    </div>
+  </nav>
+
+  <main class="p-8">
+    <div class="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
+      <div class="mx-auto max-w-none">
+        <h1 class="text-5xl font-bold text-center">Activate Management</h1>
+
+        <button class="p-4 bg-green-300 hover:bg-green-500 rounded-md mt-5" onclick="openRoleModal()">
+          🛠️ กดเพื่อเลือกรับพนักงาน
+        </button>
+
+
+        <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg mt-10">
+          <ul role="list" class="divide-y divide-gray-200 opacity-100" id="user-list">
+            <!-- รายการผู้ใช้จะถูกเพิ่มที่นี่โดย jQuery -->
+          </ul>
         </div>
       </div>
-    </main>
+    </div>
+  </main>
 
-    <script>
-      $(document).ready(function () {
-        // ดึงข้อมูลผู้ใช้ที่ต้องการ Activate
-        $.getJSON("/admin/employees-to-activate", function (users) {
-          var userList = $("#user-list");
-          userList.empty(); // ล้างรายการเก่า
-    
-          // เพิ่มรายการผู้ใช้ใหม่
-          users.forEach(function (user) {
-            var listItem = `
-              <li data-id="${user.id}">
-                <div class="block hover:bg-gray-50">
-                  <div class="px-4 py-4 sm:px-6">
-                    <div class="flex items-center justify-between">
-                      <div class="truncate text-sm font-medium text-indigo-600">
-                        ${user.name}
+
+
+
+  <!-- Modal สำหรับเลือกรับพนักงานและกำหนดยศ -->
+  <div id="roleModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+      <h3 class="text-lg font-semibold">📝 เลือกรับพนักงานและกำหนดยศ</h3>
+      <div class="mt-2 space-y-2">
+        <label for="user-select" class="block text-sm font-medium text-gray-700">เลือกผู้ใช้:</label>
+        <select id="user-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring">
+
+        </select>
+        <label for="role-select" class="block text-sm font-medium text-gray-700">กำหนดยศ:</label>
+        <select id="role-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring">
+          <option value="admin">ผู้ดูแลระบบ</option>
+          <option value="packing staff">พนักงานแพ็คสินค้า</option>
+          <option value="preparation staff">พนักงานจัดเตรียมสินค้า</option>
+        </select>
+      </div>
+      <div class="mt-4 flex justify-end space-x-2">
+        <button onclick="closeRoleModal()" class="bg-gray-500 text-white px-4 py-2 rounded-md">ปิด</button>
+        <button onclick="assignRoleAndActivate()" class="bg-blue-500 text-white px-4 py-2 rounded-md">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    $(document).ready(function () {
+      // ดึงข้อมูลผู้ใช้ที่ต้องการ Activate
+      $.getJSON("/admin/employees-to-activate", function (users) {
+        var userList = $("#user-list");
+        userList.empty(); // ล้างรายการเก่า
+
+        if (users.length === 0) {
+          // หากไม่มีผู้ใช้ให้แสดงข้อความนี้
+          userList.append(`
+                  <li>
+                      <div class="p-4 text-center text-gray-500">
+                          🛡️ ขณะนี้ไม่มีพนักงานรอการยืนยันการเปิดบัญชี
                       </div>
-                    </div>
-                    <div class="mt-2 flex justify-between">
-                      <div class="sm:flex">
-                        <div class="mr-6 flex items-center text-sm text-gray-500">
-                          <svg class="mr-1.5 size-5 shrink-0 text-gray-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                            <path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 0 1 7 18a9.953 9.953 0 0 1-5.385-1.572ZM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 0 0-1.588-3.755 4.502 4.502 0 0 1 5.874 2.636.818.818 0 0 1-.36.98A7.465 7.465 0 0 1 14.5 16Z"></path>
-                          </svg>
-                          ${user.position}
-                        </div>
+                  </li>
+              `);
+          return;
+        }
+
+        // เพิ่มรายการผู้ใช้ใหม่
+        users.forEach(function (user) {
+          var listItem = `
+                  <li data-id="${user.id}">
+                      <div class="block hover:bg-gray-50">
+                          <div class="px-4 py-4 sm:px-6">
+                              <div class="flex items-center justify-between">
+                                  <div class="truncate text-sm font-medium text-indigo-600">
+                                      ${user.name}
+                                  </div>
+                              </div>
+                              <div class="mt-2 flex justify-between">
+                                  <div class="sm:flex">
+                                      <div class="mr-6 flex items-center text-sm text-gray-500">
+                                          <svg class="mr-1.5 size-5 shrink-0 text-gray-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                              <path d="M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 0 1 7 18a9.953 9.953 0 0 1-5.385-1.572ZM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 0 0-1.588-3.755 4.502 4.502 0 0 1 5.874 2.636.818.818 0 0 1-.36.98A7.465 7.465 0 0 1 14.5 16Z"></path>
+                                          </svg>
+                                          ${user.position || 'ยังไม่ได้ระบุตำแหน่ง'}
+                                      </div>
+                                  </div>
+                                  <div class="flex items-center text-sm text-gray-500 space-x-2">
+                                      <button class="bg-red-200 rounded p-2" onclick="deleteUser(${user.id})">❌</button>
+                                      <button class="bg-green-200 rounded p-2" onclick="activateUser(${user.id})">✔</button>
+                                  </div>
+                              </div>
+                          </div>
                       </div>
-                      <div class="flex items-center text-sm text-gray-500 space-x-2">
-                        <button class="bg-red-200 rounded p-2" onclick="deleteUser(${user.id})">❌</button>
-                        <button class="bg-green-200 rounded p-2" onclick="activateUser(${user.id})">✔</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </li>
-            `;
-            userList.append(listItem);
-          });
+                  </li>
+              `;
+          userList.append(listItem);
         });
+      }).fail(function (error) {
+        console.error("❌ เกิดข้อผิดพลาดในการดึงข้อมูลพนักงาน:", error.responseJSON?.detail || error);
+        alert("❌ ไม่สามารถโหลดข้อมูลพนักงานได้");
       });
-    
-      // ฟังก์ชัน Activate User ผ่าน jQuery AJAX
-      function activateUser(userId) {
-        console.log("🔄 กำลังอัปเดตสถานะผู้ใช้", userId);
-    
-        $.ajax({
-          url: `/admin/${userId}/activate`,
-          type: 'PUT',
-          contentType: 'application/json',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          success: function (response) {
-            console.log("✅ สถานะผู้ใช้ถูกอัปเดตสำเร็จ:", response);
-            alert(`✅ User ${userId} activated successfully.`);
-            $(`#user-list li[data-id="${userId}"]`).remove(); // ลบผู้ใช้ที่ Activate ออกจากรายการ
-          },
-          error: function (xhr, status, error) {
-            console.error("❌ เกิดข้อผิดพลาด:", xhr.responseJSON.detail || error);
-            alert(`❌ Failed to activate user: ${xhr.responseJSON.detail || error}`);
-          }
+    });
+
+
+    // ฟังก์ชัน Activate User ผ่าน jQuery AJAX
+    function activateUser(userId) {
+      console.log("🔄 กำลังอัปเดตสถานะผู้ใช้", userId);
+
+      $.ajax({
+        url: `/admin/${userId}/activate`,
+        type: 'PUT',
+        contentType: 'application/json',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        success: function (response) {
+          console.log("✅ สถานะผู้ใช้ถูกอัปเดตสำเร็จ:", response);
+          alert(`✅ User ${userId} activated successfully.`);
+          $(`#user-list li[data-id="${userId}"]`).remove(); // ลบผู้ใช้ที่ Activate ออกจากรายการ
+        },
+        error: function (xhr, status, error) {
+          console.error("❌ เกิดข้อผิดพลาด:", xhr.responseJSON.detail || error);
+          alert(`❌ Failed to activate user: ${xhr.responseJSON.detail || error}`);
+        }
+      });
+    }
+    // ฟังก์ชัน Delete User ผ่าน jQuery AJAX
+    function deleteUser(userId) {
+      console.log("🗑️ กำลังลบผู้ใช้", userId);
+
+      $.ajax({
+        url: `/admin/${userId}`,
+        type: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        success: function (response) {
+          console.log("✅ ผู้ใช้ถูกลบสำเร็จ:", response);
+          alert(`✅ User ${userId} deleted successfully.`);
+          $(`#user-list li[data-id="${userId}"]`).remove(); // ลบผู้ใช้ออกจากรายการ
+        },
+        error: function (xhr, status, error) {
+          console.error("❌ เกิดข้อผิดพลาด:", xhr.responseJSON.detail || error);
+          alert(`❌ Failed to delete user: ${xhr.responseJSON.detail || error}`);
+        }
+      });
+    }
+  </script>
+
+  <script>
+    // เปิด Modal
+    function openRoleModal() {
+      $('#roleModal').removeClass('hidden');
+
+      // ดึงข้อมูลผู้ใช้ที่เป็น Customer และยังไม่ Active
+      $.getJSON("/admin/customers-to-activate", function (data) {
+        let userSelect = $('#user-select');
+        userSelect.empty(); // เคลียร์ข้อมูลเก่า
+
+        data.customers.forEach(user => {
+          userSelect.append(`<option value="${user.id}">${user.name} (${user.email})</option>`);
         });
+      }).fail(function (error) {
+        console.error("❌ เกิดข้อผิดพลาดในการดึงข้อมูลลูกค้า:", error.responseJSON?.detail || error);
+        alert("❌ ไม่สามารถดึงข้อมูลลูกค้าได้");
+      });
+    }
+
+    // ปิด Modal
+    function closeRoleModal() {
+      $('#roleModal').addClass('hidden');
+    }
+
+    // กำหนดยศและ Activate ผู้ใช้
+    function assignRoleAndActivate() {
+      const userId = $('#user-select').val();
+      const role = $('#role-select').val();
+
+      if (!userId || !role) {
+        alert('❌ กรุณาเลือกผู้ใช้และกำหนดยศ');
+        return;
       }
-    
-      // ฟังก์ชัน Delete User ผ่าน jQuery AJAX
-      function deleteUser(userId) {
-        console.log("🗑️ กำลังลบผู้ใช้", userId);
-    
-        $.ajax({
-          url: `/admin/${userId}`,
-          type: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          },
-          success: function (response) {
-            console.log("✅ ผู้ใช้ถูกลบสำเร็จ:", response);
-            alert(`✅ User ${userId} deleted successfully.`);
-            $(`#user-list li[data-id="${userId}"]`).remove(); // ลบผู้ใช้ออกจากรายการ
-          },
-          error: function (xhr, status, error) {
-            console.error("❌ เกิดข้อผิดพลาด:", xhr.responseJSON.detail || error);
-            alert(`❌ Failed to delete user: ${xhr.responseJSON.detail || error}`);
-          }
-        });
-      }
-    </script>
-    
-  </body>
+
+      $.ajax({
+        url: `/admin/users/${userId}/change-role?role=${role}`,
+        type: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        success: function (response) {
+          console.log("✅ Role ถูกเปลี่ยนสำเร็จ:", response);
+          closeRoleModal();
+          alert(`✅ กำหนดยศและ Activate ผู้ใช้ ${userId} สำเร็จ`);
+          location.reload(); // รีโหลดหน้าเพื่อแสดงผลการเปลี่ยน Role
+        },
+        error: function (xhr, status, error) {
+          console.error("❌ เกิดข้อผิดพลาดในการเปลี่ยน Role:", xhr.responseJSON?.detail || error);
+          alert(`❌ Failed to change role: ${xhr.responseJSON?.detail || error}`);
+        }
+      });
+    }
+
+  </script>
+
+</body>
+
 </html>

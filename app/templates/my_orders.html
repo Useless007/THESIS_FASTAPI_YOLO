@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>คำสั่งซื้อของฉัน</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+
+    <nav class="bg-white p-4 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="text-lg font-bold">MasterLeng Shop</a>
+            <a href="/logout" class="text-gray-700 hover:text-red-600">ออกจากระบบ</a>
+        </div>
+    </nav>
+
+    <main class="container mx-auto my-8 p-4 bg-white rounded-lg shadow-md">
+        <h1 class="text-2xl font-bold mb-4">🛒 คำสั่งซื้อของฉัน</h1>
+        <div id="orders-container" class="overflow-x-auto">
+            <table class="min-w-full bg-white border border-gray-300">
+                <thead>
+                    <tr>
+                        <th class="py-2 px-4 border-b">หมายเลขคำสั่งซื้อ</th>
+                        <th class="py-2 px-4 border-b">วันที่สั่งซื้อ</th>
+                        <th class="py-2 px-4 border-b">สถานะ</th>
+                        <th class="py-2 px-4 border-b">ยอดรวม</th>
+                    </tr>
+                </thead>
+                <tbody id="orders-table">
+                    <!-- ข้อมูลคำสั่งซื้อจะถูกเติมผ่าน JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const cookies = document.cookie.split('; ').reduce((acc, cookie) => {
+                const [name, value] = cookie.split('=');
+                acc[name] = value;
+                return acc;
+            }, {});
+
+            const token = cookies['Authorization'] ? cookies['Authorization'].replace('Bearer ', '') : null;
+
+            fetch('/orders/my-orders', {
+                method: 'GET',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('❌ ไม่สามารถดึงข้อมูลคำสั่งซื้อได้');
+                }
+                return response.json();
+            })
+            .then(orders => {
+                const table = document.getElementById('orders-table');
+                table.innerHTML = '';
+
+                orders.forEach(order => {
+                    const row = `
+                        <tr>
+                            <td class="py-2 px-4 border-b">${order.order_id}</td>
+                            <td class="py-2 px-4 border-b">${new Date(order.created_at).toLocaleDateString()}</td>
+                            <td class="py-2 px-4 border-b">${order.status}</td>
+                            <td class="py-2 px-4 border-b">฿${order.total}</td>
+                        </tr>
+                    `;
+                    table.innerHTML += row;
+                });
+            })
+            .catch(error => {
+                console.error('❌ Error:', error);
+                document.getElementById('orders-container').innerHTML = '<p class="text-red-500">ไม่พบคำสั่งซื้อ</p>';
+            });
+        });
+    </script>
+
+</body>
+</html>
