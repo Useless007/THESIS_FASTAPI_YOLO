@@ -27,7 +27,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 # middleware ต่างๆ
-app.add_middleware(middleware.AuthRedirectMiddleware)
+# app.add_middleware(middleware.AuthRedirectMiddleware)
 # app.add_middleware(middleware.ExceptionLoggingMiddleware)
 # app.add_middleware(middleware.BlockMaliciousRequestsMiddleware)
 # app.add_middleware(middleware.FilterInvalidHTTPMethodMiddleware)

@@ -132,9 +132,9 @@
     <canvas id="canvas"></canvas>
 
     <script>
-        const stream = document.getElementById('stream');
         const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const stream = document.getElementById('stream');
         const detectionList = document.getElementById('detection-list');
         const capturedImage = document.getElementById('captured-image');
         const startCameraBtn = document.getElementById('start-camera');
@@ -145,12 +145,30 @@
         const closeModal = document.getElementById('close-modal');
 
         // ✅ เปิดกล้อง
-        startCameraBtn.addEventListener('click', () => {
-            stream.crossOrigin = "anonymous";
-            stream.src = "http://localhost:8001/packing/stream";
-            startCameraBtn.disabled = true;
-            stopCameraBtn.disabled = false;
-            captureBtn.disabled = false;
+        startCameraBtn.addEventListener('click', async () => {
+            try {
+                // ✅ ดึง Authorization Token
+                const token = document.cookie
+                    .split('; ')
+                    .find(row => row.startsWith('Authorization='))
+                    ?.split('=')[1];
+
+                // ลบเครื่องหมาย " (ถ้ามี)
+                const cleanedToken = token ? token.replace(/"/g, '') : null;
+
+                if (!cleanedToken) {
+                    throw new Error('❌ No Authorization Token Found');
+                }
+
+                // ✅ ตั้งค่า stream.src ให้ดึงจาก backend
+                // stream.crossOrigin = "anonymous";
+                stream.src = `http://localhost:8001/packing/stream?token=${cleanedToken}`;
+                startCameraBtn.disabled = true;
+                stopCameraBtn.disabled = false;
+                captureBtn.disabled = false;
+            } catch (error) {
+                console.error('❌ Error starting camera:', error.message);
+            }
         });
 
         // ✅ ปิดกล้อง
@@ -160,11 +178,30 @@
             stopCameraBtn.disabled = true;
             captureBtn.disabled = true;
 
-            test = async () => fetch('http://localhost:8001/packing/stop-stream', {
-                method: 'GET'
-            });
+            try {
+                // ✅ ดึง Authorization Token
+                const token = document.cookie
+                    .split('; ')
+                    .find(row => row.startsWith('Authorization='))
+                    ?.split('=')[1];
 
-            test();
+                if (!token) {
+                    throw new Error('❌ No Authorization Token Found');
+                }
+
+                test = async () => fetch('http://localhost:8001/packing/stop-stream', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    }
+                });
+
+                test();
+
+            } catch (error) {
+                console.error('❌ Error detecting objects:', error.message);
+                detectionList.innerHTML = `<div class="text-red-500 font-semibold">${error.message}</div>`;
+            }
 
 
 

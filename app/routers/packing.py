@@ -2,7 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor
 import asyncio
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from app.models.user import User
@@ -41,59 +41,63 @@ video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # ลดขนาด buffer เ�
 video_capture.set(cv2.CAP_PROP_FPS, 15)  # ลด Frame Rate
 video_capture.set(cv2.CAP_PROP_POS_MSEC, 5000)  # กำหนด timeout (5 วินาที)
 
-def start_camera():
+async def start_camera():
     global video_capture
     print("🔍 Trying to open RTSP stream...")
-    if video_capture is None or not video_capture.isOpened():
-        print("⚠️ Starting or Restarting Camera Stream...")
-        retry_count = 0
-        max_retries = 5
 
-        while retry_count < max_retries:
-            try:
-                video_capture = cv2.VideoCapture(RTSP_LINK, cv2.CAP_FFMPEG)  # ลองใช้ FFMPEG ก่อน
-                if video_capture.isOpened():
-                    print("✅ Camera stream started successfully.")
-                    return
-                else:
-                    print(f"⚠️ Attempt {retry_count + 1} to open camera stream failed.")
-            except Exception as e:
-                print(f"❌ Exception when opening camera: {e}")
-            retry_count += 1
+    # ปิดกล้องก่อนเปิดใหม่ (ถ้ามี)
+    if video_capture is not None:
+        video_capture.release()
+        video_capture = None
+        await asyncio.sleep(1)
 
-        # ลองใช้ GStreamer หากยังไม่สำเร็จ
-        if not video_capture.isOpened():
-            print("⚠️ Switching to GStreamer...")
-            gst_pipeline = f"rtspsrc location={RTSP_LINK} latency=0 ! decodebin ! videoconvert ! appsink"
-            video_capture = cv2.VideoCapture(gst_pipeline, cv2.CAP_GSTREAMER)
+    retry_count = 0
+    max_retries = 5
+    while retry_count < max_retries:
+        video_capture = cv2.VideoCapture(RTSP_LINK, cv2.CAP_FFMPEG)
+        await asyncio.sleep(2)  # รอให้กล้องเริ่มทำงาน
+        if video_capture.isOpened():
+            print("✅ Camera stream started successfully.")
+            return True
+        else:
+            print(f"⚠️ Attempt {retry_count + 1} to open camera stream failed.")
+            video_capture.release()  # ปิดถ้าเปิดไม่สำเร็จ
+            video_capture = None
+        retry_count += 1
 
-    if not video_capture.isOpened():
-        raise HTTPException(status_code=500, detail="❌ Failed to open camera stream after retries.")
+    print("❌ Failed to open RTSP stream after multiple retries.")
+    return False
 
-
-
-def stop_camera():
+async def stop_camera():
     global video_capture
     if video_capture and video_capture.isOpened():
         video_capture.release()
-        cv2.destroyAllWindows()  # Clear OpenCV resources
+        cv2.destroyAllWindows()
         video_capture = None
+        await asyncio.sleep(1)  # ให้เวลาปิดกล้อง
     print("✅ Camera resources released.")
 
 # ✅ สตรีมวิดีโอจากกล้อง
 @router.get("/stream")
-async def stream_video():
+async def stream_video(
+    token: str = Query(..., description="Token ต้องไม่มีเครื่องหมายคำพูด"),  # แก้คำอธิบาย
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+):
     global video_capture
 
     if not stream_lock.acquire(blocking=False):
         raise HTTPException(status_code=429, detail="Stream is already in use.")
 
     try:
-        start_camera()
+        await start_camera()
 
         def generate():
             retry_count = 0
             max_retries = 5
+            if video_capture is None or not video_capture.isOpened():
+                raise HTTPException(status_code=500, detail="❌ Camera is not available.")
+
             while video_capture.isOpened():
                 success, frame = video_capture.read()
                 if not success:
@@ -118,7 +122,10 @@ async def stream_video():
 
 # ✅ ปิดกล้อง
 @router.get("/stop-stream")
-async def stop_stream():
+async def stop_stream(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+):
     stop_camera()
     print("✅ ThreadPoolExecutor resources released.")
     return {"message": "🛑 Camera stream stopped successfully."}
