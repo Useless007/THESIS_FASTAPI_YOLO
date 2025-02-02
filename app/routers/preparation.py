@@ -59,12 +59,12 @@ def approve_order(
     current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "preparation staff"))
 ):
     """
-    อนุมัติคำสั่งซื้อ (เปลี่ยนสถานะเป็น ready_for_packing)
+    อนุมัติคำสั่งซื้อ (เปลี่ยนสถานะเป็น packing)
     """
     order = db.query(Order).filter(and_(Order.order_id == order_id, Order.status == "confirmed")).first()
     if not order:
         raise HTTPException(status_code=404, detail="❌ Order not found or invalid status")
-    order.status = "ready_for_packing"
+    order.status = "packing"
     db.commit()
     return {"message": f"✅ Order {order_id} approved successfully"}
 

@@ -2,7 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor
 import asyncio
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from app.models.user import User
@@ -12,13 +12,14 @@ import subprocess,json,shutil,torch,os,cv2,traceback,threading
 from ultralytics import YOLO
 
 router = APIRouter(prefix="/packing", tags=["Packing Staff"])
+stream_lock = asyncio.Lock()  # Lock เพื่อจัดการการเข้าถึง Stream
 
 # ✅ โหลดโมเดล YOLOv10
 MODEL_PATH = "app/models/best.pt"
 UPLOAD_DIR = "uploads/packing_images"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-stream_lock = threading.Lock()  # Lock เพื่อจัดการการเข้าถึง Stream
+# stream_lock = threading.Lock()  # Lock เพื่อจัดการการเข้าถึง Stream
 
 try:
     model = YOLO(MODEL_PATH)
@@ -27,7 +28,7 @@ except Exception as e:
 
 
 # ✅ กล้อง IP RTSP
-RTSP_LINK = 'rtsp://admin:R2teamza99@192.168.0.241:10544/tcp/av0_0'
+RTSP_LINK = 'rtsp://admin:R2teamza99@192.168.0.242:10544/tcp/av0_0'
 
 # gst_pipeline = (
 #     f"rtspsrc location={RTSP_LINK} latency=0 ! "
@@ -71,53 +72,86 @@ async def start_camera():
 async def stop_camera():
     global video_capture
     if video_capture and video_capture.isOpened():
+        print("🛑 Stopping camera stream...")
         video_capture.release()
         cv2.destroyAllWindows()
-        video_capture = None
-        await asyncio.sleep(1)  # ให้เวลาปิดกล้อง
+        video_capture = None  # ปิดกล้องแล้วตั้งค่าให้เป็น None
+        await asyncio.sleep(1)  # ให้เวลากล้องปิดอย่างสมบูรณ์
     print("✅ Camera resources released.")
+
+
+# ✅ แคปภาพจากกล้อง
+@router.get("/snapshot")
+async def snapshot():
+    global video_capture
+    # ถ้า video_capture ยังไม่เปิด ก็ต้อง start_camera() ก่อน
+    if video_capture is None or not video_capture.isOpened():
+        raise HTTPException(status_code=400, detail="Camera is not opened")
+
+    success, frame = video_capture.read()
+    if not success:
+        raise HTTPException(status_code=500, detail="Cannot read frame from camera")
+
+    # encode เป็น jpg
+    _, buffer = cv2.imencode('.jpg', frame)
+
+    return Response(content=buffer.tobytes(), media_type="image/jpeg")
+
 
 # ✅ สตรีมวิดีโอจากกล้อง
 @router.get("/stream")
 async def stream_video(
-    token: str = Query(..., description="Token ต้องไม่มีเครื่องหมายคำพูด"),  # แก้คำอธิบาย
+    token: str = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
 ):
     global video_capture
 
-    if not stream_lock.acquire(blocking=False):
+    await start_camera()
+
+    # ล็อกไม่ให้สตรีมซ้อน
+    locked = stream_lock.locked()
+    if locked:
         raise HTTPException(status_code=429, detail="Stream is already in use.")
 
-    try:
-        await start_camera()
+    # โค้ดหลังจากนี้ให้อยู่ระดับเดียวกับ if locked:
 
-        def generate():
-            retry_count = 0
-            max_retries = 5
-            if video_capture is None or not video_capture.isOpened():
-                raise HTTPException(status_code=500, detail="❌ Camera is not available.")
+    async def generate():
+        try:
+            while True:
+                if video_capture is None or not video_capture.isOpened():
+                    print("⚠️ Camera is not opened or has been stopped.")
+                    break
 
-            while video_capture.isOpened():
                 success, frame = video_capture.read()
                 if not success:
-                    retry_count += 1
-                    if retry_count >= max_retries:
-                        break
+                    await asyncio.sleep(0.01)
                     continue
-                retry_count = 0
+
+                # เข้ารหัสภาพเป็น .jpg
                 _, buffer = cv2.imencode('.jpg', frame)
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
 
-            stop_camera()
+                # ส่งข้อมูลรูปภาพ (mjpeg)
+                yield (
+                    b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
+                )
 
-        response = StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
-        # response.headers["Access-Control-Allow-Origin"] = "*"  # เพิ่ม Header CORS
-        # response.headers["Access-Control-Allow-Headers"] = "*"
-        return response
-    finally:
-        stream_lock.release()
+                await asyncio.sleep(0.01)
+        except Exception as e:
+            print(f"❌ Error during stream generation: {e}")
+        finally:
+            # ถ้า generator หลุด/จบไม่ว่ากรณีใด ให้ stop_camera()
+            await stop_camera()
+
+    response = StreamingResponse(
+        generate(), 
+        media_type="multipart/x-mixed-replace;boundary=frame"
+    )
+    # response.headers["Access-Control-Allow-Origin"] = "*"
+    # response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
+
 
 
 # ✅ ปิดกล้อง
@@ -126,9 +160,15 @@ async def stop_stream(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
 ):
-    stop_camera()
-    print("✅ ThreadPoolExecutor resources released.")
-    return {"message": "🛑 Camera stream stopped successfully."}
+    print("🔄 Request received to stop camera stream.")
+    
+    # หยุดการสตรีมก่อน
+    await stop_camera()
+
+    # แจ้งให้ Client หยุดรับข้อมูล
+    response = JSONResponse(content={"message": "🛑 Camera stream stopped successfully."})
+    response.headers["Connection"] = "close"
+    return response
 
 
 # ✅ สร้างและจัดการ Executor
@@ -220,8 +260,9 @@ async def detect_objects(
             raise HTTPException(status_code=500, detail="Invalid response from YOLO worker.")
 
         response = JSONResponse(content={"detections": output.get("detections", []), "image_path": file_path})
-        response.headers["Access-Control-Allow-Origin"] = "*"  # Allow all origins
-        response.headers["Access-Control-Allow-Headers"] = "*"  # Allow all headers
+
+        # response = JSONResponse(content={"detections": [], "image_path": file_path}) # debug capture only comment out
+
         return response
 
     except Exception as e:

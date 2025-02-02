@@ -7,13 +7,67 @@
     <title>Packing Staff Camera Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
     <style>
+        /* Container wrapper สำหรับ video stream, spinner และ overlay */
+        .video-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        /* สไตล์สำหรับภาพ stream */
         #stream {
             border: 2px solid #ccc;
             border-radius: 8px;
             width: 640px;
             height: 480px;
+            display: block;
         }
 
+        /* สไตล์ spinner */
+        #loading-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            margin: -25px 0 0 -25px;
+            /* เลื่อนให้อยู่ตรงกลาง */
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            z-index: 10;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Overlay เมื่อกล้องถูกปิด */
+        #camera-off-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            font-size: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            border-radius: 8px;
+            z-index: 15;
+            display: none;
+        }
+
+        /* ส่วนอื่นๆ */
         #canvas {
             display: none;
         }
@@ -93,20 +147,39 @@
     </nav>
 
     <main class="p-8 text-center">
+
+        <!-- Dropdown สำหรับเลือกกล้อง (แสดงโต๊ะที่ใช้งาน) -->
+        <div class="mb-4">
+            <label for="camera-dropdown" class="block mb-2 text-lg font-semibold">เลือกกล้อง (โต๊ะ):</label>
+            <select id="camera-dropdown" class="border border-gray-300 rounded-md p-2">
+                <!-- ตัวเลือกจะถูก populate โดย JavaScript -->
+            </select>
+        </div>
+
+
         <h2 class="text-2xl font-bold mb-6">🔍 ตรวจจับสินค้าในภาพด้วย YOLOv10 ผ่านกล้อง</h2>
 
         <!-- Streaming Video -->
         <div class="flex justify-center mb-4">
-            <img id="stream" src="" alt="Video Stream">
+            <div class="video-container">
+                <div id="loading-spinner"></div>
+                <img id="stream" src="http://localhost:8001/packing/stream" alt="Video Stream">
+                <!-- Overlay เมื่อกล้องถูกปิด -->
+                <div id="camera-off-overlay">
+                    <div style="font-size: 48px;">🚫</div>
+                    <div>กล้องถูกปิดอยู่</div>
+                </div>
+            </div>
         </div>
 
         <!-- Controls -->
         <div class="flex justify-center space-x-4 mb-4">
-            <button id="start-camera" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">📸
+            <button id="start-camera" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+                disabled>📸
                 เปิดกล้อง</button>
-            <button id="stop-camera" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600" disabled>🛑
+            <button id="stop-camera" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">🛑
                 ปิดกล้อง</button>
-            <button id="capture" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600" disabled>📷
+            <button id="capture" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">📷
                 ถ่ายภาพ</button>
         </div>
 
@@ -121,6 +194,15 @@
                 <img id="captured-image" src="" alt="Captured Image" class="hidden">
             </div>
         </div>
+
+        <!-- ส่วนแสดงรายการคำสั่งซื้อที่มีสถานะ packing -->
+        <section class="mt-8">
+            <h3 class="text-2xl font-bold mb-4">📦 รายการคำสั่งซื้อที่กำลัง Packing</h3>
+            <div id="packing-orders-list" class="bg-white shadow-md p-4 rounded-md">
+                <!-- รายการคำสั่งซื้อจะถูกดึงและแสดงที่นี่ -->
+            </div>
+        </section>
+
     </main>
 
     <!-- Modal สำหรับแสดงภาพขยาย -->
@@ -143,45 +225,163 @@
         const modal = document.getElementById('image-modal');
         const modalImg = document.getElementById('modal-image');
         const closeModal = document.getElementById('close-modal');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const cameraOffOverlay = document.getElementById('camera-off-overlay');
+        const cameraDropdown = document.getElementById('camera-dropdown');
+        const packingOrdersList = document.getElementById('packing-orders-list');
+
+        let currentCamera = null; // เก็บข้อมูลกล้องที่เลือก
+
+        // ซ่อน spinner เมื่อภาพจาก stream โหลดเสร็จ
+        stream.addEventListener('load', () => {
+            loadingSpinner.style.display = 'none';
+            // เมื่อภาพโหลดแล้วให้ซ่อน overlay ถ้ามีการแสดงอยู่ (กรณีเปิดกล้องใหม่)
+            cameraOffOverlay.style.display = 'none';
+        });
+
+
+
+
+        // โหลดรายชื่อกล้องจาก DB (สมมุติว่า endpoint /packing/cameras คืนข้อมูล JSON)
+        async function loadCameraList() {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+            try {
+                const response = await fetch('/packing/cameras', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`Error fetching cameras: ${response.status}`);
+                }
+                const cameras = await response.json();
+                // Populate dropdown
+                cameraDropdown.innerHTML = '';
+                cameras.forEach(camera => {
+                    const option = document.createElement('option');
+                    option.value = camera.id;
+                    // สมมุติว่า camera มี property table_number, name และ stream_url
+                    option.textContent = `โต๊ะ ${camera.table_number} - กล้อง ${camera.name}`;
+                    option.dataset.streamUrl = camera.stream_url;
+                    cameraDropdown.appendChild(option);
+                });
+                // เลือกกล้องตัวแรกเป็นค่าเริ่มต้น
+                if (cameras.length > 0) {
+                    currentCamera = cameras[0];
+                    cameraDropdown.value = currentCamera.id;
+                    stream.src = currentCamera.stream_url;
+                    startCameraBtn.disabled = false;
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        // เมื่อเลือกกล้องจาก dropdown ให้ update การแสดงผลของ stream
+        cameraDropdown.addEventListener('change', (e) => {
+            const selectedOption = cameraDropdown.options[cameraDropdown.selectedIndex];
+            currentCamera = {
+                id: selectedOption.value,
+                stream_url: selectedOption.dataset.streamUrl,
+                table_number: selectedOption.textContent
+            };
+            stream.src = currentCamera.stream_url;
+            startCameraBtn.disabled = false;
+        });
+
+        // โหลดรายการคำสั่งซื้อที่มีสถานะ packing
+        async function loadPackingOrders() {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+            try {
+                const response = await fetch('/packing/orders/packing', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`Error fetching packing orders: ${response.status}`);
+                }
+                const orders = await response.json();
+                packingOrdersList.innerHTML = '';
+                if (orders.length === 0) {
+                    packingOrdersList.innerHTML = '<p class="text-gray-500">ไม่มีคำสั่งซื้อที่กำลัง Packing</p>';
+                    return;
+                }
+                // สร้างตารางสำหรับแสดงรายการคำสั่งซื้อ
+                const table = document.createElement('table');
+                table.className = 'w-full text-sm text-center border-collapse border border-gray-200';
+                table.innerHTML = `
+            <thead>
+              <tr class="bg-gray-200 text-gray-600 uppercase text-xs font-semibold">
+                <th class="py-2 px-3 border">Order ID</th>
+                <th class="py-2 px-3 border">Email</th>
+                <th class="py-2 px-3 border">Total</th>
+                <th class="py-2 px-3 border">Date</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          `;
+                const tbody = table.querySelector('tbody');
+                orders.forEach(order => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-gray-100';
+                    tr.innerHTML = `
+              <td class="py-2 px-3 border">${order.id}</td>
+              <td class="py-2 px-3 border">${order.email}</td>
+              <td class="py-2 px-3 border">฿${order.total}</td>
+              <td class="py-2 px-3 border">${new Date(order.created_at).toLocaleDateString()}</td>
+            `;
+                    tbody.appendChild(tr);
+                });
+                packingOrdersList.appendChild(table);
+            } catch (error) {
+                console.error(error);
+                packingOrdersList.innerHTML = `<p class="text-red-500">เกิดข้อผิดพลาด: ${error.message}</p>`;
+            }
+        }
+
+
+
+
+
 
         // ✅ เปิดกล้อง
         startCameraBtn.addEventListener('click', async () => {
-            try {
-                // ✅ ดึง Authorization Token
-                const token = document.cookie
-                    .split('; ')
-                    .find(row => row.startsWith('Authorization='))
-                    ?.split('=')[1];
-
-                // ลบเครื่องหมาย " (ถ้ามี)
-                const cleanedToken = token ? token.replace(/"/g, '') : null;
-
-                if (!cleanedToken) {
-                    throw new Error('❌ No Authorization Token Found');
-                }
-
-                // ✅ ตั้งค่า stream.src ให้ดึงจาก backend
-                // stream.crossOrigin = "anonymous";
-                stream.src = `http://localhost:8001/packing/stream?token=${cleanedToken}`;
+            // ซ่อน overlay เมื่อเริ่มเปิดกล้อง
+            cameraOffOverlay.style.display = 'none';
+            // แสดง spinner เมื่อเริ่มโหลดภาพ
+            loadingSpinner.style.display = 'block';
+            async function startCamera() {
+                stream.src = "http://localhost:8001/packing/stream";
                 startCameraBtn.disabled = true;
                 stopCameraBtn.disabled = false;
                 captureBtn.disabled = false;
-            } catch (error) {
-                console.error('❌ Error starting camera:', error.message);
+
+
+
+
             }
+
+            startCamera();
+
         });
 
         // ✅ ปิดกล้อง
-        stopCameraBtn.addEventListener('click', () => {
-            stream.src = "";
+        stopCameraBtn.addEventListener('click', async () => {
+            stream.src = ""; // ปิด stream ในหน้าเว็บ
             startCameraBtn.disabled = false;
             stopCameraBtn.disabled = true;
             captureBtn.disabled = true;
 
+            // แสดง overlay ว่า "กล้องถูกปิดอยู่"
+            cameraOffOverlay.style.display = 'flex';
+
             try {
-                // ✅ ดึง Authorization Token
-                const token = document.cookie
-                    .split('; ')
+                const token = document.cookie.split('; ')
                     .find(row => row.startsWith('Authorization='))
                     ?.split('=')[1];
 
@@ -189,38 +389,26 @@
                     throw new Error('❌ No Authorization Token Found');
                 }
 
-                test = async () => fetch('http://localhost:8001/packing/stop-stream', {
+                const response = await fetch('http://localhost:8001/packing/stop-stream', {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`,
                     }
                 });
 
-                test();
+                if (!response.ok) {
+                    throw new Error(`❌ Server responded with ${response.status}: ${response.statusText}`);
+                }
 
+                console.log("🛑 Camera stream stopped.");
             } catch (error) {
-                console.error('❌ Error detecting objects:', error.message);
-                detectionList.innerHTML = `<div class="text-red-500 font-semibold">${error.message}</div>`;
+                console.error('❌ Error stopping camera:', error.message);
             }
-
-
-
         });
 
-        // ✅ ถ่ายภาพ
+
         captureBtn.addEventListener('click', async () => {
-            canvas.width = 640;
-            canvas.height = 480;
-            ctx.drawImage(stream, 0, 0, canvas.width, canvas.height);
-
-            console.log("Before get image blob");
-
-            const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-            const formData = new FormData();
-            formData.append('file', imageBlob, 'captured_image.png');
-
             try {
-                // ✅ ดึง Authorization Token
                 const token = document.cookie
                     .split('; ')
                     .find(row => row.startsWith('Authorization='))
@@ -230,29 +418,43 @@
                     throw new Error('❌ No Authorization Token Found');
                 }
 
-                // ✅ ส่งภาพไปยัง Backend
-                console.log("Sending request to backend");
-                const response = await fetch('http://localhost:8001/packing/detect', {
-                    method: 'POST',
+                // ดึงภาพจาก stream โดยตรง
+                const response = await fetch("http://localhost:8001/packing/snapshot", {
+                    method: 'GET',
                     headers: {
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: formData,
+                        'Authorization': `Bearer ${token}`
+                    }
                 });
 
                 if (!response.ok) {
                     throw new Error(`❌ Server responded with ${response.status}: ${response.statusText}`);
                 }
 
-                const result = await response.json();
-                console.log(result);
+                const imageBlob = await response.blob(); // ได้ภาพในรูปแบบ blob
+                const formData = new FormData();
+                formData.append('file', imageBlob, 'captured_image.png');
 
-                // ล้างลิสต์การตรวจจับเก่า
-                detectionList.innerHTML = "";
+                console.log('📸 Sending captured image to backend...');
 
+                const detectResponse = await fetch('http://localhost:8001/packing/detect', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                if (!detectResponse.ok) {
+                    throw new Error(`❌ Server responded with ${detectResponse.status}: ${detectResponse.statusText}`);
+                }
+
+                const result = await detectResponse.json();
+                console.log('✅ Detection result:', result);
+
+                // แสดงผลลัพธ์การตรวจจับ
+                detectionList.innerHTML = '';
                 if (result.detections.length > 0) {
                     result.detections.forEach(det => {
-                        const [x1, y1, x2, y2] = det.box;
                         const listItem = document.createElement('div');
                         listItem.innerHTML = `<strong>${det.label}</strong> - ความมั่นใจ: ${(det.confidence * 100).toFixed(1)}%`;
                         detectionList.appendChild(listItem);
@@ -265,18 +467,16 @@
                 const imgURL = URL.createObjectURL(imageBlob);
                 capturedImage.src = imgURL;
                 capturedImage.classList.remove('hidden');
-
-                // คลิกเพื่อดู Modal
                 capturedImage.onclick = () => {
-                    modal.style.display = "block";
+                    modal.style.display = 'block';
                     modalImg.src = capturedImage.src;
                 };
-
             } catch (error) {
-                console.error('❌ Error detecting objects:', error.message);
+                console.error('❌ Error capturing and detecting image:', error.message);
                 detectionList.innerHTML = `<div class="text-red-500 font-semibold">${error.message}</div>`;
             }
         });
+
 
 
 

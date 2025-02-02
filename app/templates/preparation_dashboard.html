@@ -53,7 +53,8 @@
                 <!-- รายการสินค้าจะถูกเพิ่มที่นี่ -->
             </ul>
             <div class="mt-6 flex justify-end space-x-2">
-                <button onclick="closeOrderModal()" class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">ปิด</button>
+                <button onclick="closeOrderModal()"
+                    class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">ปิด</button>
             </div>
         </div>
     </div>
@@ -117,6 +118,48 @@
                 })
                 .catch(error => {
                     console.error('❌ Error fetching order details:', error);
+                });
+        }
+
+        // อนุมัติคำสั่งซื้อ
+        function approveOrder(orderId) {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+            fetch(`/preparation/orders/${orderId}/approve`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    loadConfirmedOrders();
+                })
+                .catch(error => {
+                    console.error('❌ Error approving order:', error);
+                    alert('เกิดข้อผิดพลาดในการอนุมัติคำสั่งซื้อ');
+                });
+        }
+
+        // ยกเลิกคำสั่งซื้อ
+        function cancelOrder(orderId) {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+            fetch(`/preparation/orders/${orderId}/cancel`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.message);
+                    loadConfirmedOrders();
+                })
+                .catch(error => {
+                    console.error('❌ Error canceling order:', error);
+                    alert('เกิดข้อผิดพลาดในการยกเลิกคำสั่งซื้อ');
                 });
         }
 
