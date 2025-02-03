@@ -2,10 +2,13 @@
 
 from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor
 import asyncio
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from app.models.user import User
+from app.models.camera import Camera
+from app.models.order import Order
 from app.services.auth import get_user_with_role_and_position_and_isActive
 from app.database import get_db
 import subprocess,json,shutil,torch,os,cv2,traceback,threading
@@ -28,7 +31,7 @@ except Exception as e:
 
 
 # ✅ กล้อง IP RTSP
-RTSP_LINK = 'rtsp://admin:R2teamza99@192.168.0.242:10544/tcp/av0_0'
+RTSP_LINK = None
 
 # gst_pipeline = (
 #     f"rtspsrc location={RTSP_LINK} latency=0 ! "
@@ -42,30 +45,26 @@ video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # ลดขนาด buffer เ�
 video_capture.set(cv2.CAP_PROP_FPS, 15)  # ลด Frame Rate
 video_capture.set(cv2.CAP_PROP_POS_MSEC, 5000)  # กำหนด timeout (5 วินาที)
 
-async def start_camera():
+async def start_camera(rtsp_link: str):
     global video_capture
-    print("🔍 Trying to open RTSP stream...")
-
-    # ปิดกล้องก่อนเปิดใหม่ (ถ้ามี)
+    print("🔍 Trying to open RTSP stream from:", rtsp_link)
     if video_capture is not None:
         video_capture.release()
         video_capture = None
         await asyncio.sleep(1)
-
     retry_count = 0
     max_retries = 5
     while retry_count < max_retries:
-        video_capture = cv2.VideoCapture(RTSP_LINK, cv2.CAP_FFMPEG)
-        await asyncio.sleep(2)  # รอให้กล้องเริ่มทำงาน
+        video_capture = cv2.VideoCapture(rtsp_link, cv2.CAP_FFMPEG)
+        await asyncio.sleep(2)
         if video_capture.isOpened():
             print("✅ Camera stream started successfully.")
             return True
         else:
             print(f"⚠️ Attempt {retry_count + 1} to open camera stream failed.")
-            video_capture.release()  # ปิดถ้าเปิดไม่สำเร็จ
+            video_capture.release()
             video_capture = None
         retry_count += 1
-
     print("❌ Failed to open RTSP stream after multiple retries.")
     return False
 
@@ -101,56 +100,45 @@ async def snapshot():
 # ✅ สตรีมวิดีโอจากกล้อง
 @router.get("/stream")
 async def stream_video(
+    request: Request,
+    camera_id: int = Query(..., description="ID ของกล้องที่ต้องการสตรีม"),
     token: str = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
 ):
-    global video_capture
-
-    await start_camera()
-
-    # ล็อกไม่ให้สตรีมซ้อน
-    locked = stream_lock.locked()
-    if locked:
-        raise HTTPException(status_code=429, detail="Stream is already in use.")
-
-    # โค้ดหลังจากนี้ให้อยู่ระดับเดียวกับ if locked:
-
+    # ดึงกล้องจาก DB ตาม camera_id
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    rtsp_link = camera.stream_url  # ใช้ RTSP link จากฐานข้อมูลแทนค่าคงที่
+    
+    # เรียก start_camera โดยใช้ rtsp_link นี้ (คุณอาจต้องปรับ start_camera ให้รับ rtsp_link เป็นพารามิเตอร์)
+    await start_camera(rtsp_link)  # ปรับแก้ start_camera ให้รองรับ parameter ได้
+    
+    # จากนั้นให้ส่ง MJPEG stream ตามที่ทำอยู่
     async def generate():
         try:
             while True:
                 if video_capture is None or not video_capture.isOpened():
                     print("⚠️ Camera is not opened or has been stopped.")
                     break
-
                 success, frame = video_capture.read()
                 if not success:
                     await asyncio.sleep(0.01)
                     continue
-
-                # เข้ารหัสภาพเป็น .jpg
                 _, buffer = cv2.imencode('.jpg', frame)
-
-                # ส่งข้อมูลรูปภาพ (mjpeg)
                 yield (
                     b'--frame\r\n'
                     b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
                 )
-
                 await asyncio.sleep(0.01)
         except Exception as e:
             print(f"❌ Error during stream generation: {e}")
         finally:
-            # ถ้า generator หลุด/จบไม่ว่ากรณีใด ให้ stop_camera()
             await stop_camera()
 
-    response = StreamingResponse(
-        generate(), 
-        media_type="multipart/x-mixed-replace;boundary=frame"
-    )
-    # response.headers["Access-Control-Allow-Origin"] = "*"
-    # response.headers["Access-Control-Allow-Headers"] = "*"
-    return response
+    return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
 
 
 
@@ -269,3 +257,84 @@ async def detect_objects(
         print(f"❌ Unexpected error: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Unexpected server error during detection process.")
+
+
+# Endpoint สำหรับดึงรายชื่อกล้อง
+@router.get("/cameras", response_class=JSONResponse)
+def get_cameras(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+):
+    """
+    ดึงรายชื่อกล้องที่เก็บไว้ใน DB
+    สมมุติว่า Model Camera มี attribute: id, table_number, name, stream_url
+    """
+    cameras = db.query(Camera).all()
+    return [
+        {
+            "id": camera.id,
+            "table_number": camera.table_number,
+            "name": camera.name,
+            "stream_url": camera.stream_url
+        } for camera in cameras
+    ]
+
+# Endpoint สำหรับดึงรายการคำสั่งซื้อที่มีสถานะ packing
+@router.get("/orders/packing", response_class=JSONResponse)
+def get_packing_orders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+):
+    """
+    ดึงรายการคำสั่งซื้อที่มีสถานะ packing เพื่อนำมาตรวจสอบว่าสินค้ามีหรือไม่
+    เฉพาะออเดอร์ที่ยังไม่ถูก assign หรือออเดอร์ที่ถูก assign ให้กับพนักงานปัจจุบัน
+    """
+    orders = db.query(Order)\
+        .filter(or_(Order.assigned_to == None, Order.assigned_to == current_user.id))\
+        .filter(Order.status.in_(["packing", "in_progres"]))\
+        .all()
+    return [
+        {
+            "id": order.order_id,
+            "email": order.email,
+            "total": order.total,
+            "created_at": order.created_at,
+            "items": order.item,
+            "assigned_to": order.assigned_to
+        } for order in orders
+    ]
+
+@router.put("/orders/{order_id}/assign", response_class=JSONResponse)
+def assign_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+):
+    """
+    พนักงานรับออเดอร์ โดยอัพเดทฟิลด์ assigned_to ให้เป็น current_user.id
+    ใช้ with_for_update() เพื่อป้องกัน race condition (การเข้าถึงข้อมูลพร้อมกัน)
+    """
+    order = (
+        db.query(Order)
+        .filter(
+            and_(
+                Order.order_id == order_id,
+                Order.status == "packing",         # ตรวจสอบสถานะว่าออเดอร์ยังอยู่ในขั้น packing
+                Order.assigned_to == None            # ยังไม่มีพนักงานรับงาน
+            )
+        )
+        .with_for_update()
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found or already assigned")
+    
+    order.assigned_to = current_user.id
+    # เปลี่ยนสถานะเพื่อแสดงว่าออเดอร์กำลังทำงานอยู่ เช่น "in-progress"
+    order.status = "in_progres"
+    db.commit()
+    
+    return JSONResponse(
+        status_code=200,
+        content={"message": f"Order {order_id} assigned to you successfully"}
+    )

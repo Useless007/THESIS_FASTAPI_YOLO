@@ -1,6 +1,6 @@
 # app/models/order.py
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
 from datetime import datetime
 from app.database import Base
 
@@ -14,3 +14,4 @@ class Order(Base):
     status = Column(String(10), default="pending")  # pending, cancelled, confirmed, packing, completed
     created_at = Column(DateTime, default=datetime.utcnow)
     slip_path = Column(String(255), nullable=True)  # เพิ่มฟิลด์นี้เพื่อเก็บ path ของสลิปการโอนเงิน
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)  # เพิ่มคอลัมน์นี้

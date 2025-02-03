@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from app import middleware
-from app.routers import user, product , public, admin, preparation, packing
+from app.routers import user, product, public, admin, preparation, packing
 from fastapi.openapi.utils import get_openapi
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -38,7 +38,6 @@ app.openapi = custom_openapi
 app.include_router(user.router)
 app.include_router(user.protected_router)
 app.include_router(user.admin_router)
-app.include_router(product.router)
 app.include_router(product.order_router)
 app.include_router(public.router)
 app.include_router(admin.router)
@@ -48,8 +47,8 @@ app.include_router(preparation.router)
 # CORS middleware เพื่อให้ Swagger UI สามารถทำงานได้
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    # allow_origins=["http://home.jintaphas.net"],
+    # allow_origins=["*"],
+    allow_origins=["http://home.jintaphas.tech"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE","OPTION"],
     allow_headers=["*"],
@@ -66,8 +65,8 @@ app.add_middleware(middleware.AuthRedirectMiddleware)
 # app.add_middleware(middleware.ExceptionLoggingMiddleware)
 # app.add_middleware(middleware.BlockMaliciousRequestsMiddleware)
 # app.add_middleware(middleware.FilterInvalidHTTPMethodMiddleware)
-# app.add_middleware(TrustedHostMiddleware, allowed_hosts=["home.jintaphas.net", "api.jintaphas.net", "127.0.0.1","192.168.0.44"])
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["home.jintaphas.tech", "api.jintaphas.tech", "127.0.0.1","192.168.0.44"])
+# app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 
 
 # Custom 404 Page

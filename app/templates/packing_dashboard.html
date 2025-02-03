@@ -1,3 +1,5 @@
+<!-- # app/templates/packing_dashboard.html -->
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -136,6 +138,15 @@
             cursor: pointer;
         }
     </style>
+
+    <script>
+        // เมื่อโหลดหน้าเว็บ ให้โหลดรายชื่อกล้องและรายการ packing orders
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCameraList();
+            loadPackingOrders();
+        });
+    </script>
+
 </head>
 
 <body class="bg-gray-100">
@@ -163,7 +174,7 @@
         <div class="flex justify-center mb-4">
             <div class="video-container">
                 <div id="loading-spinner"></div>
-                <img id="stream" src="http://localhost:8001/packing/stream" alt="Video Stream">
+                <img id="stream" src="">
                 <!-- Overlay เมื่อกล้องถูกปิด -->
                 <div id="camera-off-overlay">
                     <div style="font-size: 48px;">🚫</div>
@@ -231,6 +242,7 @@
         const packingOrdersList = document.getElementById('packing-orders-list');
 
         let currentCamera = null; // เก็บข้อมูลกล้องที่เลือก
+        loadingSpinner.style.display = 'none'; // ซ่อน spinner เมื่อเริ่มโหลดหน้าเว็บ
 
         // ซ่อน spinner เมื่อภาพจาก stream โหลดเสร็จ
         stream.addEventListener('load', () => {
@@ -247,7 +259,7 @@
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
             try {
-                const response = await fetch('/packing/cameras', {
+                const response = await fetch('http://192.168.0.44:8001/packing/cameras', {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -296,7 +308,7 @@
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
             try {
-                const response = await fetch('/packing/orders/packing', {
+                const response = await fetch('http://192.168.0.44:8001/packing/orders/packing', {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -306,6 +318,7 @@
                     throw new Error(`Error fetching packing orders: ${response.status}`);
                 }
                 const orders = await response.json();
+                const packingOrdersList = document.getElementById('packing-orders-list');
                 packingOrdersList.innerHTML = '';
                 if (orders.length === 0) {
                     packingOrdersList.innerHTML = '<p class="text-gray-500">ไม่มีคำสั่งซื้อที่กำลัง Packing</p>';
@@ -315,32 +328,74 @@
                 const table = document.createElement('table');
                 table.className = 'w-full text-sm text-center border-collapse border border-gray-200';
                 table.innerHTML = `
-            <thead>
-              <tr class="bg-gray-200 text-gray-600 uppercase text-xs font-semibold">
-                <th class="py-2 px-3 border">Order ID</th>
-                <th class="py-2 px-3 border">Email</th>
-                <th class="py-2 px-3 border">Total</th>
-                <th class="py-2 px-3 border">Date</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          `;
+                    <thead>
+                      <tr class="bg-gray-200 text-gray-600 uppercase text-xs font-semibold">
+                        <th class="py-2 px-3 border">Order ID</th>
+                        <th class="py-2 px-3 border">Email</th>
+                        <th class="py-2 px-3 border">Total</th>
+                        <th class="py-2 px-3 border">Date</th>
+                        <th class="py-2 px-3 border">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                `;
                 const tbody = table.querySelector('tbody');
                 orders.forEach(order => {
                     const tr = document.createElement('tr');
                     tr.className = 'hover:bg-gray-100';
+                    // สร้าง cell สำหรับปุ่มรับงาน
+                    let actionCell = '';
+                    if (order.assigned_to === null) {
+                        // ถ้ายังไม่ถูก assign ให้แสดงปุ่ม "รับงาน"
+                        actionCell = `<button onclick="claimOrder(${order.id})" class="bg-blue-500 text-white px-2 py-1 rounded-md hover:bg-blue-600">รับงาน</button>`;
+                    } else {
+                        // ถ้า already assigned (จะเป็นออเดอร์ที่ assign ให้กับพนักงานปัจจุบัน)
+                        actionCell = `<span class="text-green-600 font-semibold">In Progress</span>`;
+                    }
                     tr.innerHTML = `
-              <td class="py-2 px-3 border">${order.id}</td>
-              <td class="py-2 px-3 border">${order.email}</td>
-              <td class="py-2 px-3 border">฿${order.total}</td>
-              <td class="py-2 px-3 border">${new Date(order.created_at).toLocaleDateString()}</td>
-            `;
+                        <td class="py-2 px-3 border">${order.id}</td>
+                        <td class="py-2 px-3 border">${order.email}</td>
+                        <td class="py-2 px-3 border">฿${order.total}</td>
+                        <td class="py-2 px-3 border">${new Date(order.created_at).toLocaleDateString()}</td>
+                        <td class="py-2 px-3 border">${actionCell}</td>
+                    `;
                     tbody.appendChild(tr);
                 });
                 packingOrdersList.appendChild(table);
             } catch (error) {
                 console.error(error);
+                const packingOrdersList = document.getElementById('packing-orders-list');
                 packingOrdersList.innerHTML = `<p class="text-red-500">เกิดข้อผิดพลาด: ${error.message}</p>`;
+            }
+        }
+    
+        // ฟังก์ชันสำหรับให้พนักงานรับงาน (Claim Order)
+        async function claimOrder(orderId) {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+            if (!token) {
+                alert("❌ No Authorization Token Found");
+                return;
+            }
+            try {
+                const response = await fetch(`http://192.168.0.44:8001/packing/orders/${orderId}/assign`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || "Failed to assign order");
+                }
+                const data = await response.json();
+                alert(data.message);
+                // รีโหลดรายการออเดอร์ใหม่
+                loadPackingOrders();
+            } catch (error) {
+                console.error("Error claiming order:", error.message);
+                alert("เกิดข้อผิดพลาดในการรับงาน: " + error.message);
             }
         }
 
@@ -349,109 +404,81 @@
 
 
 
-        // ✅ เปิดกล้อง
+        // เปิดกล้อง
         startCameraBtn.addEventListener('click', async () => {
-            // ซ่อน overlay เมื่อเริ่มเปิดกล้อง
-            cameraOffOverlay.style.display = 'none';
-            // แสดง spinner เมื่อเริ่มโหลดภาพ
-            loadingSpinner.style.display = 'block';
-            async function startCamera() {
-                stream.src = "http://localhost:8001/packing/stream";
+            try {
+                const token = document.cookie
+                    .split('; ')
+                    .find(row => row.startsWith('Authorization='))?.split('=')[1];
+                const cleanedToken = token ? token.replace(/"/g, '') : null;
+                if (!cleanedToken) {
+                    throw new Error('❌ No Authorization Token Found');
+                }
+                cameraOffOverlay.style.display = 'none';
+                loadingSpinner.style.display = 'block';
+                if (!currentCamera) return;
+                // เปลี่ยนจากการใช้ currentCamera.stream_url ตรงๆ เป็นเรียก backend stream endpoint
+                stream.src = `http://192.168.0.44:8001/packing/stream?camera_id=${currentCamera.id}&token=${cleanedToken}`;
                 startCameraBtn.disabled = true;
                 stopCameraBtn.disabled = false;
                 captureBtn.disabled = false;
-
-
-
-
+            } catch (error) {
+                console.error('❌ Error starting camera:', error.message);
             }
-
-            startCamera();
-
         });
 
-        // ✅ ปิดกล้อง
+        // ปิดกล้อง
         stopCameraBtn.addEventListener('click', async () => {
-            stream.src = ""; // ปิด stream ในหน้าเว็บ
+            stream.src = ''; // ปิด stream
             startCameraBtn.disabled = false;
             stopCameraBtn.disabled = true;
             captureBtn.disabled = true;
-
-            // แสดง overlay ว่า "กล้องถูกปิดอยู่"
             cameraOffOverlay.style.display = 'flex';
-
             try {
                 const token = document.cookie.split('; ')
-                    .find(row => row.startsWith('Authorization='))
-                    ?.split('=')[1];
-
-                if (!token) {
-                    throw new Error('❌ No Authorization Token Found');
-                }
-
-                const response = await fetch('http://localhost:8001/packing/stop-stream', {
+                    .find(row => row.startsWith('Authorization='))?.split('=')[1];
+                if (!token) throw new Error('❌ No Authorization Token Found');
+                const response = await fetch('http://192.168.0.44:8001/packing/stop-stream', {
                     method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                    }
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
-
                 if (!response.ok) {
                     throw new Error(`❌ Server responded with ${response.status}: ${response.statusText}`);
                 }
-
                 console.log("🛑 Camera stream stopped.");
             } catch (error) {
                 console.error('❌ Error stopping camera:', error.message);
             }
         });
 
-
+        // ถ่ายภาพและส่งไปตรวจจับสินค้า
         captureBtn.addEventListener('click', async () => {
             try {
-                const token = document.cookie
-                    .split('; ')
-                    .find(row => row.startsWith('Authorization='))
-                    ?.split('=')[1];
-
-                if (!token) {
-                    throw new Error('❌ No Authorization Token Found');
-                }
-
-                // ดึงภาพจาก stream โดยตรง
-                const response = await fetch("http://localhost:8001/packing/snapshot", {
+                const token = document.cookie.split('; ')
+                    .find(row => row.startsWith('Authorization='))?.split('=')[1];
+                if (!token) throw new Error('❌ No Authorization Token Found');
+                // ดึงภาพจาก stream
+                const response = await fetch("http://192.168.0.44:8001/packing/snapshot", {
                     method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
-
                 if (!response.ok) {
                     throw new Error(`❌ Server responded with ${response.status}: ${response.statusText}`);
                 }
-
-                const imageBlob = await response.blob(); // ได้ภาพในรูปแบบ blob
+                const imageBlob = await response.blob();
                 const formData = new FormData();
                 formData.append('file', imageBlob, 'captured_image.png');
-
                 console.log('📸 Sending captured image to backend...');
-
-                const detectResponse = await fetch('http://localhost:8001/packing/detect', {
+                const detectResponse = await fetch('http://192.168.0.44:8001/packing/detect', {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
+                    headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
                 });
-
                 if (!detectResponse.ok) {
                     throw new Error(`❌ Server responded with ${detectResponse.status}: ${detectResponse.statusText}`);
                 }
-
                 const result = await detectResponse.json();
                 console.log('✅ Detection result:', result);
-
-                // แสดงผลลัพธ์การตรวจจับ
                 detectionList.innerHTML = '';
                 if (result.detections.length > 0) {
                     result.detections.forEach(det => {
@@ -462,8 +489,6 @@
                 } else {
                     detectionList.innerHTML = `<div class="text-red-500 font-semibold">❌ AI ไม่สามารถตรวจจับสินค้าได้</div>`;
                 }
-
-                // แสดงภาพที่ถ่าย
                 const imgURL = URL.createObjectURL(imageBlob);
                 capturedImage.src = imgURL;
                 capturedImage.classList.remove('hidden');
@@ -477,13 +502,11 @@
             }
         });
 
-
-
-
-        // ✅ ปิด Modal
+        // ปิด Modal เมื่อคลิกปุ่มปิด
         closeModal.onclick = () => {
-            modal.style.display = "none";
+            modal.style.display = 'none';
         };
+
     </script>
 </body>
 
