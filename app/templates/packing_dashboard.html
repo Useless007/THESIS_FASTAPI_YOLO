@@ -407,18 +407,21 @@
         // เปิดกล้อง
         startCameraBtn.addEventListener('click', async () => {
             try {
-                const token = document.cookie
-                    .split('; ')
+                const token = document.cookie.split('; ')
                     .find(row => row.startsWith('Authorization='))?.split('=')[1];
-                const cleanedToken = token ? token.replace(/"/g, '') : null;
-                if (!cleanedToken) {
+
+                if (!token) {
                     throw new Error('❌ No Authorization Token Found');
                 }
+
                 cameraOffOverlay.style.display = 'none';
                 loadingSpinner.style.display = 'block';
+
                 if (!currentCamera) return;
-                // เปลี่ยนจากการใช้ currentCamera.stream_url ตรงๆ เป็นเรียก backend stream endpoint
-                stream.src = `https://thesis-api.jintaphas.tech/packing/stream?camera_id=${currentCamera.id}&token=${cleanedToken}`;
+
+                // ✅ ใช้ camera_id ในการสตรีม
+                stream.src = `https://thesis-api.jintaphas.tech/packing/stream?camera_id=${currentCamera.id}&token=${token}`;
+
                 startCameraBtn.disabled = true;
                 stopCameraBtn.disabled = false;
                 captureBtn.disabled = false;
@@ -429,56 +432,68 @@
 
         // ปิดกล้อง
         stopCameraBtn.addEventListener('click', async () => {
-            stream.src = ''; // ปิด stream
-            startCameraBtn.disabled = false;
-            stopCameraBtn.disabled = true;
-            captureBtn.disabled = true;
-            cameraOffOverlay.style.display = 'flex';
             try {
                 const token = document.cookie.split('; ')
                     .find(row => row.startsWith('Authorization='))?.split('=')[1];
-                if (!token) throw new Error('❌ No Authorization Token Found');
-                const response = await fetch('https://thesis-api.jintaphas.tech/packing/stop-stream', {
+
+                if (!token) {
+                    throw new Error('❌ No Authorization Token Found');
+                }
+
+                // ✅ ใช้ camera_id ในการปิดกล้อง
+                await fetch(`https://thesis-api.jintaphas.tech/packing/stop-stream?camera_id=${currentCamera.id}`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                if (!response.ok) {
-                    throw new Error(`❌ Server responded with ${response.status}: ${response.statusText}`);
-                }
-                console.log("🛑 Camera stream stopped.");
+
+                stream.src = ''; // ปิด stream
+                cameraOffOverlay.style.display = 'flex';
+                startCameraBtn.disabled = false;
+                stopCameraBtn.disabled = true;
+                captureBtn.disabled = true;
             } catch (error) {
                 console.error('❌ Error stopping camera:', error.message);
             }
         });
 
-        // ถ่ายภาพและส่งไปตรวจจับสินค้า
+
         captureBtn.addEventListener('click', async () => {
             try {
                 const token = document.cookie.split('; ')
                     .find(row => row.startsWith('Authorization='))?.split('=')[1];
+
                 if (!token) throw new Error('❌ No Authorization Token Found');
-                // ดึงภาพจาก stream
-                const response = await fetch("https://thesis-api.jintaphas.tech/packing/snapshot", {
+                if (!currentCamera) throw new Error('❌ No Camera Selected');
+
+                // ✅ ใช้ camera_id ส่งไปที่ backend
+                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/snapshot?camera_id=${currentCamera.id}`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+
                 if (!response.ok) {
                     throw new Error(`❌ Server responded with ${response.status}: ${response.statusText}`);
                 }
+
                 const imageBlob = await response.blob();
                 const formData = new FormData();
                 formData.append('file', imageBlob, 'captured_image.png');
+
                 console.log('📸 Sending captured image to backend...');
+
                 const detectResponse = await fetch('https://thesis-api.jintaphas.tech/packing/detect', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
                 });
+
                 if (!detectResponse.ok) {
                     throw new Error(`❌ Server responded with ${detectResponse.status}: ${detectResponse.statusText}`);
                 }
+
                 const result = await detectResponse.json();
                 console.log('✅ Detection result:', result);
+
                 detectionList.innerHTML = '';
                 if (result.detections.length > 0) {
                     result.detections.forEach(det => {
@@ -489,6 +504,7 @@
                 } else {
                     detectionList.innerHTML = `<div class="text-red-500 font-semibold">❌ AI ไม่สามารถตรวจจับสินค้าได้</div>`;
                 }
+
                 const imgURL = URL.createObjectURL(imageBlob);
                 capturedImage.src = imgURL;
                 capturedImage.classList.remove('hidden');
@@ -501,6 +517,8 @@
                 detectionList.innerHTML = `<div class="text-red-500 font-semibold">${error.message}</div>`;
             }
         });
+
+
 
         // ปิด Modal เมื่อคลิกปุ่มปิด
         closeModal.onclick = () => {

@@ -45,56 +45,58 @@ video_capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # ลดขนาด buffer เ�
 video_capture.set(cv2.CAP_PROP_FPS, 15)  # ลด Frame Rate
 video_capture.set(cv2.CAP_PROP_POS_MSEC, 5000)  # กำหนด timeout (5 วินาที)
 
-async def start_camera(rtsp_link: str):
-    global video_capture
-    print("🔍 Trying to open RTSP stream from:", rtsp_link)
-    if video_capture is not None:
-        video_capture.release()
-        video_capture = None
+video_captures = {}  # ใช้ camera_id เป็น key
+
+async def start_camera(camera_id: int, rtsp_link: str):
+    global video_captures
+
+    # ถ้ามีกล้องตัวนี้อยู่แล้วให้ปิดก่อน
+    if camera_id in video_captures:
+        video_captures[camera_id].release()
+        del video_captures[camera_id]
         await asyncio.sleep(1)
-    retry_count = 0
-    max_retries = 5
-    while retry_count < max_retries:
-        video_capture = cv2.VideoCapture(rtsp_link, cv2.CAP_FFMPEG)
-        await asyncio.sleep(2)
-        if video_capture.isOpened():
-            print("✅ Camera stream started successfully.")
-            return True
-        else:
-            print(f"⚠️ Attempt {retry_count + 1} to open camera stream failed.")
-            video_capture.release()
-            video_capture = None
-        retry_count += 1
-    print("❌ Failed to open RTSP stream after multiple retries.")
-    return False
 
-async def stop_camera():
-    global video_capture
-    if video_capture and video_capture.isOpened():
-        print("🛑 Stopping camera stream...")
-        video_capture.release()
-        cv2.destroyAllWindows()
-        video_capture = None  # ปิดกล้องแล้วตั้งค่าให้เป็น None
-        await asyncio.sleep(1)  # ให้เวลากล้องปิดอย่างสมบูรณ์
-    print("✅ Camera resources released.")
+    print(f"🔍 เปิดกล้อง {camera_id} ที่ {rtsp_link}")
+    
+    video_capture = cv2.VideoCapture(rtsp_link, cv2.CAP_FFMPEG)
+    if not video_capture.isOpened():
+        print(f"❌ ไม่สามารถเปิดกล้อง {camera_id}")
+        return False
 
+    video_captures[camera_id] = video_capture
+    print(f"✅ เปิดกล้อง {camera_id} สำเร็จ")
+    return True
+
+async def stop_camera(camera_id: int):
+    global video_captures
+    if camera_id in video_captures:
+        print(f"🛑 ปิดกล้อง {camera_id}")
+        video_captures[camera_id].release()
+        del video_captures[camera_id]
+        await asyncio.sleep(1)
+    print(f"✅ กล้อง {camera_id} ถูกปิด")
 
 # ✅ แคปภาพจากกล้อง
 @router.get("/snapshot")
-async def snapshot():
-    global video_capture
-    # ถ้า video_capture ยังไม่เปิด ก็ต้อง start_camera() ก่อน
-    if video_capture is None or not video_capture.isOpened():
-        raise HTTPException(status_code=400, detail="Camera is not opened")
+async def snapshot(
+    camera_id: int = Query(..., description="ID ของกล้องที่ต้องการแคปภาพ"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+):
+    global video_captures
 
-    success, frame = video_capture.read()
+    if camera_id not in video_captures or not video_captures[camera_id].isOpened():
+        raise HTTPException(status_code=400, detail=f"Camera {camera_id} is not opened")
+
+    success, frame = video_captures[camera_id].read()
     if not success:
-        raise HTTPException(status_code=500, detail="Cannot read frame from camera")
+        raise HTTPException(status_code=500, detail=f"Cannot read frame from camera {camera_id}")
 
     # encode เป็น jpg
     _, buffer = cv2.imencode('.jpg', frame)
 
     return Response(content=buffer.tobytes(), media_type="image/jpeg")
+
 
 
 # ✅ สตรีมวิดีโอจากกล้อง
@@ -106,24 +108,27 @@ async def stream_video(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
 ):
-    # ดึงกล้องจาก DB ตาม camera_id
+    global video_captures
+
+    # ดึงข้อมูลกล้องจาก DB
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
-    
-    rtsp_link = camera.stream_url  # ใช้ RTSP link จากฐานข้อมูลแทนค่าคงที่
-    
-    # เรียก start_camera โดยใช้ rtsp_link นี้ (คุณอาจต้องปรับ start_camera ให้รับ rtsp_link เป็นพารามิเตอร์)
-    await start_camera(rtsp_link)  # ปรับแก้ start_camera ให้รองรับ parameter ได้
-    
-    # จากนั้นให้ส่ง MJPEG stream ตามที่ทำอยู่
+
+    rtsp_link = camera.stream_url  # ดึง RTSP link จาก DB
+
+    # ตรวจสอบว่ากล้องถูกเปิดแล้วหรือยัง
+    if camera_id not in video_captures or not video_captures[camera_id].isOpened():
+        await start_camera(camera_id, rtsp_link)
+
+    # ✅ ฟังก์ชันสร้าง Stream
     async def generate():
         try:
             while True:
-                if video_capture is None or not video_capture.isOpened():
-                    print("⚠️ Camera is not opened or has been stopped.")
+                if camera_id not in video_captures or not video_captures[camera_id].isOpened():
+                    print(f"⚠️ กล้อง {camera_id} ถูกปิด")
                     break
-                success, frame = video_capture.read()
+                success, frame = video_captures[camera_id].read()
                 if not success:
                     await asyncio.sleep(0.01)
                     continue
@@ -134,9 +139,9 @@ async def stream_video(
                 )
                 await asyncio.sleep(0.01)
         except Exception as e:
-            print(f"❌ Error during stream generation: {e}")
+            print(f"❌ Error streaming camera {camera_id}: {e}")
         finally:
-            await stop_camera()
+            await stop_camera(camera_id)
 
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
 
@@ -145,18 +150,15 @@ async def stream_video(
 # ✅ ปิดกล้อง
 @router.get("/stop-stream")
 async def stop_stream(
+    camera_id: int = Query(..., description="ID ของกล้องที่ต้องการปิด"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
 ):
-    print("🔄 Request received to stop camera stream.")
+    print(f"🔄 คำขอให้ปิดกล้อง {camera_id}")
     
-    # หยุดการสตรีมก่อน
-    await stop_camera()
+    await stop_camera(camera_id)
 
-    # แจ้งให้ Client หยุดรับข้อมูล
-    response = JSONResponse(content={"message": "🛑 Camera stream stopped successfully."})
-    response.headers["Connection"] = "close"
-    return response
+    return JSONResponse(content={"message": f"🛑 กล้อง {camera_id} ถูกปิดสำเร็จ"})
 
 
 # ✅ สร้างและจัดการ Executor
