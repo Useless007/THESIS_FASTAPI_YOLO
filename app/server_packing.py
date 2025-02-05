@@ -15,7 +15,7 @@ app.include_router(packing_router)
 app.add_middleware(
     CORSMiddleware,
     # allow_origins=["*"],
-    allow_origins=["http://home.jintaphas.tech"], # domain name
+    allow_origins=["https://home.jintaphas.tech"], # domain name
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE","OPTION"],
     allow_headers=["*"],
@@ -27,11 +27,11 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 # middleware ต่างๆ
-# app.add_middleware(middleware.AuthRedirectMiddleware)
-# app.add_middleware(middleware.ExceptionLoggingMiddleware)
-# app.add_middleware(middleware.BlockMaliciousRequestsMiddleware)
-# app.add_middleware(middleware.FilterInvalidHTTPMethodMiddleware)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["home.jintaphas.tech", "api.jintaphas.tech", "127.0.0.1","192.168.0.44"])
+app.add_middleware(middleware.AuthRedirectMiddleware)
+app.add_middleware(middleware.ExceptionLoggingMiddleware)
+app.add_middleware(middleware.BlockMaliciousRequestsMiddleware)
+app.add_middleware(middleware.FilterInvalidHTTPMethodMiddleware)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["home.jintaphas.tech", "thesis-api.jintaphas.tech", "127.0.0.1","192.168.0.44"])
 # app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])
 
 

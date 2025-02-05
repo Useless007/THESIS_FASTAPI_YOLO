@@ -83,7 +83,7 @@ def authenticate_user_and_generate_token(
     response.set_cookie(
         key="Authorization",
         value=f"Bearer {access_token}",
-        # domain=".jintaphas.net", # อนุญาตให้ทุก subdomain ใช้ Cookies ได้
+        domain=".jintaphas.tech", # อนุญาตให้ทุก subdomain ใช้ Cookies ได้
         httponly=False,  # False เพื่อให้ JavaScript อ่านได้
         secure=False,   # เปลี่ยนเป็น True บน HTTPS
         samesite="Lax",
@@ -146,7 +146,7 @@ def post_register_form(
         response.set_cookie(
             key="Authorization",
             value=f"Bearer {access_token}",
-            # domain=".jintaphas.net", # อนุญาตให้ทุก subdomain ใช้ Cookies ได้
+            domain=".jintaphas.tech", # อนุญาตให้ทุก subdomain ใช้ Cookies ได้
             httponly=False,  # False เพื่อให้ JavaScript อ่านได้
             secure=False,   # True ถ้าใช้ HTTPS
             samesite="Lax",

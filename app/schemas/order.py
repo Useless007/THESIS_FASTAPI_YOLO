@@ -9,8 +9,8 @@ class OrderOut(BaseModel):
     total: float
     status: str
     created_at: datetime
-    slip_path: str
-    assigned_to: int
+    slip_path: str = None
+    assigned_to: str = None
 
     class Config:
         orm_mode = True
