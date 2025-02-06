@@ -194,6 +194,15 @@
                 ถ่ายภาพ</button>
         </div>
 
+        <!-- แสดงข้อมูลออเดอร์ที่รับ -->
+        <section class="mt-8">
+            <h3 class="text-2xl font-bold mb-4">📦 รายละเอียดออเดอร์ที่กำลังบรรจุ</h3>
+            <div id="current-order" class="bg-white shadow-md p-4 rounded-md">
+                <p class="text-gray-500">ยังไม่มีออเดอร์ที่รับ</p>
+            </div>
+        </section>
+
+
         <!-- Detection Results -->
         <h3 class="text-lg font-bold mt-4">📋 รายการสิ่งที่ตรวจพบ:</h3>
         <div id="detection-list" class="bg-white shadow-md text-gray-700"></div>
@@ -373,10 +382,12 @@
         async function claimOrder(orderId) {
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
+
             if (!token) {
                 alert("❌ No Authorization Token Found");
                 return;
             }
+
             try {
                 const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/assign`, {
                     method: 'PUT',
@@ -385,14 +396,21 @@
                         'Content-Type': 'application/json'
                     }
                 });
+
                 if (!response.ok) {
                     const errorData = await response.json();
                     throw new Error(errorData.detail || "Failed to assign order");
                 }
-                const data = await response.json();
-                alert(data.message);
-                // รีโหลดรายการออเดอร์ใหม่
+
+                const orderData = await response.json();
+                alert(`🎉 คุณได้รับออเดอร์ ${orderData.order_id} แล้ว!`);
+
+                // ✅ อัปเดต UI แสดงข้อมูลออเดอร์
+                displayOrderDetails(orderData);
+
+                // ✅ โหลดออเดอร์ที่ยังไม่ได้รับใหม่
                 loadPackingOrders();
+
             } catch (error) {
                 console.error("Error claiming order:", error.message);
                 alert("เกิดข้อผิดพลาดในการรับงาน: " + error.message);
@@ -400,8 +418,34 @@
         }
 
 
+        function displayOrderDetails(orderData) {
+            const currentOrderDiv = document.getElementById('current-order');
 
+            if (!orderData) {
+                currentOrderDiv.innerHTML = '<p class="text-gray-500">ยังไม่มีออเดอร์ที่รับ</p>';
+                return;
+            }
 
+            let itemsHtml = "";
+            orderData.items.forEach(item => {
+                itemsHtml += `
+                    <li class="border-b py-2">
+                        <strong>${item.product_name}</strong> - ${item.quantity} ชิ้น
+                    </li>
+                `;
+            });
+
+            currentOrderDiv.innerHTML = `
+                <div class="p-4 border rounded-md bg-gray-100">
+                    <p><strong>🆔 Order ID:</strong> ${orderData.order_id}</p>
+                    <p><strong>📧 ลูกค้า:</strong> ${orderData.customer_email}</p>
+                    <p><strong>💰 ราคารวม:</strong> ฿${orderData.total_price}</p>
+                    <p><strong>📅 วันที่:</strong> ${orderData.created_at}</p>
+                    <h4 class="text-lg font-bold mt-4">📦 รายการสินค้า</h4>
+                    <ul class="mt-2">${itemsHtml}</ul>
+                </div>
+            `;
+        }
 
 
         // เปิดกล้อง

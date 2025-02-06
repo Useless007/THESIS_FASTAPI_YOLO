@@ -312,31 +312,53 @@ def assign_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
 ):
-    """
-    พนักงานรับออเดอร์ โดยอัพเดทฟิลด์ assigned_to ให้เป็น current_user.id
-    ใช้ with_for_update() เพื่อป้องกัน race condition (การเข้าถึงข้อมูลพร้อมกัน)
-    """
     order = (
         db.query(Order)
         .filter(
             and_(
                 Order.order_id == order_id,
-                Order.status == "packing",         # ตรวจสอบสถานะว่าออเดอร์ยังอยู่ในขั้น packing
-                Order.assigned_to == None            # ยังไม่มีพนักงานรับงาน
+                Order.status == "packing",
+                Order.assigned_to == None
             )
         )
         .with_for_update()
         .first()
     )
+    
     if not order:
         raise HTTPException(status_code=404, detail="Order not found or already assigned")
-    
+
     order.assigned_to = current_user.id
-    # เปลี่ยนสถานะเพื่อแสดงว่าออเดอร์กำลังทำงานอยู่ เช่น "in-progress"
-    order.status = "in_progres"
+    order.status = "in_progress"
     db.commit()
-    
-    return JSONResponse(
-        status_code=200,
-        content={"message": f"Order {order_id} assigned to you successfully"}
-    )
+    db.refresh(order)
+
+    # ✅ แปลง `items` จาก string JSON เป็น list
+    try:
+        items = json.loads(order.item)
+    except json.JSONDecodeError:
+        items = []
+        print("❌ Error decoding items JSON")
+
+    # ✅ สร้างข้อมูลที่พร้อมใช้ใน Frontend
+    formatted_items = [
+        {
+            "product_id": item.get("product_id", "N/A"),
+            "product_name": item.get("name", "Unknown"),
+            "quantity": item.get("quantity", 0),
+            "price": item.get("price", 0.0),
+            "total": item.get("total", 0.0)
+        }
+        for item in items
+    ]
+
+    order_data = {
+        "order_id": order.order_id,
+        "customer_email": order.email,
+        "total_price": order.total,
+        "items": formatted_items,  # ✅ ใช้ข้อมูลที่แปลงแล้ว
+        "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    return JSONResponse(content=order_data)
+
