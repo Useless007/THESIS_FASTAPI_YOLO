@@ -391,24 +391,45 @@ async def upload_packed_image(
     return JSONResponse(content={"message": "Image uploaded successfully", "image_path": file_path})
 
 @router.put("/orders/{order_id}/verify", response_class=JSONResponse)
-def verify_order(
+async def verify_order(
     order_id: int,
-    request: VerifyRequest,  # ✅ รับค่าผ่าน Request Body แทน Query Parameter
+    verified: bool = Form(...),
+    file: UploadFile = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
 ):
     """
-    อัปเดตสถานะออเดอร์ ว่าของครบหรือไม่ครบ
+    ✅ อัปเดตสถานะออเดอร์ ว่าของครบหรือไม่ครบ และบันทึกรูปภาพ
     """
     order = db.query(Order).filter(Order.order_id == order_id, Order.assigned_to == current_user.id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found or not assigned to you")
 
-    order.is_verified = request.verified
-    order.status = "completed" if request.verified else "pending"
+    print(f"✅ รับค่า verified: {verified}")
+    print(f"✅ รับไฟล์: {file.filename if file else 'ไม่มีไฟล์'}")
+
+    # ✅ ถ้าไม่มีภาพ และออเดอร์ไม่มีรูปมาก่อน → แจ้งเตือน
+    if not file and not order.image_path:
+        raise HTTPException(status_code=400, detail="กรุณาตรวจจับสินค้าก่อน")
+
+    # ✅ ถ้ามีการอัปโหลดไฟล์ภาพ ให้บันทึกลงฐานข้อมูล
+    if file:
+        upload_dir = "uploads/packed_orders"
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, f"{order_id}.jpg")
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        order.image_path = file_path  # ✅ บันทึก path รูปภาพลงฐานข้อมูล
+
+    # ✅ อัปเดตสถานะออเดอร์
+    order.is_verified = verified
+    order.status = "completed" if verified else "pending"
     db.commit()
 
-    return JSONResponse(content={"message": "Order verification updated", "is_verified": request.verified})
+    return JSONResponse(content={"message": "Order verification updated", "is_verified": verified, "image_path": order.image_path})
+
 
 @router.get("/orders/current", response_class=JSONResponse)
 def get_current_order(

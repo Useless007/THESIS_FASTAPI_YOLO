@@ -144,19 +144,19 @@
         async function loadCurrentOrder() {
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
-        
+
             if (!token) return;
-        
+
             try {
                 const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/current`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-        
+
                 if (!response.ok) throw new Error("Failed to fetch order");
-        
+
                 const orderData = await response.json();
-        
+
                 // ✅ ถ้ามีออเดอร์ ให้แสดงผล & บันทึกลง localStorage
                 if (orderData.order_id) {
                     localStorage.setItem("currentOrderId", orderData.order_id);
@@ -165,13 +165,13 @@
                     localStorage.removeItem("currentOrderId");  // ✅ ถ้าไม่มีออเดอร์ให้ลบ localStorage
                     displayOrderDetails(null);
                 }
-        
+
             } catch (error) {
                 console.error("❌ Error loading current order:", error.message);
                 displayOrderDetails(null);
             }
         }
-        
+
 
         // ✅ โหลดข้อมูลเมื่อหน้าเว็บเปิด
         document.addEventListener('DOMContentLoaded', () => {
@@ -241,12 +241,6 @@
         <!-- Detection Results -->
         <h3 class="text-lg font-bold mt-4">📋 รายการสิ่งที่ตรวจพบ:</h3>
         <div id="detection-list" class="bg-white shadow-md text-gray-700"></div>
-
-        <br>
-        <button class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
-            onclick="verifyOrder(order_id, true)">✅ สินค้าครบ</button>
-        <button class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
-            onclick="verifyOrder(order_id, false)">❌ สินค้ายังไม่ครบ</button>
 
         <!-- Captured Image -->
         <h3 class="text-lg font-bold mt-4">🖼️ ภาพที่ถ่ายได้:</h3>
@@ -618,20 +612,53 @@
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
         
-            const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/verify`, {
-                method: "PUT",
-                headers: {
-                    "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ verified: isVerified })
-            });
+            if (!token) {
+                alert("❌ No Authorization Token Found");
+                return;
+            }
         
-            const result = await response.json();
-            alert(result.message);
-            window.location.reload();
+            const formData = new FormData();
+            formData.append("verified", isVerified);
+        
+            // ✅ ตรวจสอบว่ามีรูปที่ถ่ายไว้หรือไม่
+            const capturedImage = document.getElementById('captured-image');
+            if (capturedImage.src && capturedImage.src.startsWith("blob")) {
+                const response = await fetch(capturedImage.src);
+                const blob = await response.blob();
+                formData.append("file", blob, "captured_image.jpg");
+            } else {
+                alert("❌ กรุณาตรวจจับสินค้าก่อนกดยืนยัน");
+                return;
+            }
+        
+            // ✅ DEBUG: ตรวจสอบค่าที่ถูกส่งไป
+            console.log("🔍 FormData ส่งไป:", formData);
+        
+            try {
+                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/verify`, {
+                    method: "PUT",
+                    headers: { "Authorization": `Bearer ${token}` },
+                    body: formData
+                });
+        
+                const result = await response.json();
+        
+                if (!response.ok) {
+                    throw new Error(result.detail);
+                }
+        
+                alert(result.message);
+
+                // FIXME: ไม่อยากให้รีโหลดทั้งหน้าอยากให้รีโหลดแค่ 
+                // 📦 รายการคำสั่งซื้อที่กำลัง Packing และ 📦 รายละเอียดออเดอร์ที่กำลังบรรจุ
+                window.location.reload();
+            } catch (error) {
+                alert("❌ " + error.message);
+            }
         }
         
+
+
 
 
 

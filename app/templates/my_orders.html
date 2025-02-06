@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>คำสั่งซื้อของฉัน</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body class="bg-gray-100 font-sans leading-normal tracking-normal">
 
     <nav class="bg-white p-4 shadow-md">
@@ -25,6 +27,12 @@
                         <th class="py-2 px-4 border-b">วันที่สั่งซื้อ</th>
                         <th class="py-2 px-4 border-b">สถานะ</th>
                         <th class="py-2 px-4 border-b">ยอดรวม</th>
+
+                        <!-- ✅ เพิ่มคอลัมน์สำหรับแสดงปุ่มดูภาพสินค้าถ้าหากมีสินค้าที่completedถึงจะแสดง -->
+                        <th id="image-header" class="py-2 px-4 border-b" style="display: none;">ดูภาพสินค้า</th>
+                        <!-- ✅ ซ่อนเริ่มต้น -->
+
+
                     </tr>
                 </thead>
                 <tbody id="orders-table">
@@ -49,34 +57,85 @@
                 headers: token ? { 'Authorization': `Bearer ${token}` } : {},
                 credentials: 'include'
             })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('❌ ไม่สามารถดึงข้อมูลคำสั่งซื้อได้');
-                }
-                return response.json();
-            })
-            .then(orders => {
-                const table = document.getElementById('orders-table');
-                table.innerHTML = '';
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('❌ ไม่สามารถดึงข้อมูลคำสั่งซื้อได้');
+                    }
+                    return response.json();
+                })
+                .then(orders => {
+                    const table = document.getElementById('orders-table');
+                    table.innerHTML = '';
 
-                orders.forEach(order => {
-                    const row = `
-                        <tr>
-                            <td class="py-2 px-4 border-b">${order.order_id}</td>
-                            <td class="py-2 px-4 border-b">${new Date(order.created_at).toLocaleDateString()}</td>
-                            <td class="py-2 px-4 border-b">${order.status}</td>
-                            <td class="py-2 px-4 border-b">฿${order.total}</td>
-                        </tr>
-                    `;
-                    table.innerHTML += row;
+                    // ✅ ตรวจสอบว่ามีคำสั่งซื้อที่ `completed` หรือไม่
+                    const hasCompletedOrder = orders.some(order => order.status === "completed" && order.image_path);
+
+                    // ✅ อัปเดตหัวตารางให้แสดงเฉพาะเมื่อมี "completed" orders
+                    const tableHeader = document.getElementById('image-header');
+                    if (hasCompletedOrder) {
+                        tableHeader.style.display = "table-cell";  // ✅ แสดงหัวข้อ "ดูภาพสินค้า"
+                    } else {
+                        tableHeader.style.display = "none";  // ✅ ซ่อนถ้าไม่มี "completed"
+                    }
+
+                    orders.forEach(order => {
+                        let viewImageButton = '';
+
+                        // ✅ ถ้ามีสถานะ "completed" และมี `image_path` ให้แสดงปุ่ม
+                        if (order.status === "completed" && order.image_path) {
+                            viewImageButton = `
+                                <button 
+                                    class="bg-blue-500 text-white px-3 py-1 rounded-md hover:bg-blue-600 block mx-auto" 
+                                    onclick="showPackedImage('${order.image_path}')"
+                                >
+                                    📸 ดูภาพสินค้าที่แพ็คแล้ว
+                                </button>
+                            `;
+                        }
+
+                        const row = `
+                            <tr>
+                                <td class="py-2 px-4 border-b">${order.order_id}</td>
+                                <td class="py-2 px-4 border-b">${new Date(order.created_at).toLocaleDateString()}</td>
+                                <td class="py-2 px-4 border-b">${order.status}</td>
+                                <td class="py-2 px-4 border-b">฿${order.total}</td>
+                                <td class="py-2 px-4 border-b text-center" style="${hasCompletedOrder ? 'display: table-cell;' : 'display: none;'}">
+                                    ${viewImageButton}
+                                </td>
+                            </tr>
+                        `;
+                        table.innerHTML += row;
+                    });
+                })
+                .catch(error => {
+                    console.error('❌ Error:', error);
+                    document.getElementById('orders-container').innerHTML = '<p class="text-red-500">❌ ไม่พบคำสั่งซื้อ</p>';
                 });
-            })
-            .catch(error => {
-                console.error('❌ Error:', error);
-                document.getElementById('orders-container').innerHTML = '<p class="text-red-500">ไม่พบคำสั่งซื้อ</p>';
-            });
         });
+
+
+        // ✅ ฟังก์ชันแสดงภาพสินค้าที่แพ็คแล้วใน Modal
+        function showPackedImage(imagePath) {
+            const modal = document.getElementById('image-modal');
+            const modalImg = document.getElementById('modal-image');
+
+            modal.style.display = "block";
+            modalImg.src = imagePath; // ✅ ใช้ path ที่ได้จาก API
+
+            document.getElementById('close-modal').onclick = () => {
+                modal.style.display = "none";
+            };
+        }
     </script>
 
+    <!-- ✅ Modal สำหรับแสดงรูปภาพสินค้าแพ็คแล้ว -->
+    <div id="image-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white p-4 rounded-lg shadow-lg relative">
+            <span id="close-modal" class="absolute top-2 right-2 text-xl cursor-pointer">&times;</span>
+            <img id="modal-image" src="" class="max-w-full max-h-[80vh] rounded-lg">
+        </div>
+    </div>
+
 </body>
+
 </html>
