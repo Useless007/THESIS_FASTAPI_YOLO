@@ -3,14 +3,14 @@
 from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor
 import asyncio
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response, Request, Form
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.camera import Camera
 from app.models.order import Order
 from app.schemas.order import VerifyRequest
-from app.services.auth import get_user_with_role_and_position_and_isActive
+from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
 from app.database import get_db
 import subprocess,json,shutil,torch,os,cv2,traceback,threading
 from ultralytics import YOLO
@@ -471,3 +471,22 @@ def get_current_order(
         "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
         "image_path": order.image_path
     })
+
+@router.get("/orders/{order_id}/image", response_class=FileResponse)
+async def get_order_image(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ✅ เช็คว่าผู้ใช้ล็อกอินอยู่
+):
+    """
+    ✅ ให้ API ส่งรูปภาพสินค้าแพ็คแล้วแทนการเข้าถึงโดยตรง
+    """
+    order = db.query(Order).filter(Order.order_id == order_id, Order.email == current_user.email).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found or you don't have permission.")
+
+    # ✅ เช็คว่ามีไฟล์ภาพจริงไหม
+    if not order.image_path or not os.path.exists(order.image_path):
+        raise HTTPException(status_code=404, detail="No packed order image found.")
+
+    return FileResponse(order.image_path, media_type="image/jpeg")

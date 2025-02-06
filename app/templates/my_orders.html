@@ -86,7 +86,7 @@
                             viewImageButton = `
                                 <button 
                                     class="bg-blue-500 text-white px-3 py-1 rounded-md hover:bg-blue-600 block mx-auto" 
-                                    onclick="showPackedImage('${order.image_path}')"
+                                    onclick="showPackedImage('${order.order_id}')"
                                 >
                                     📸 ดูภาพสินค้าที่แพ็คแล้ว
                                 </button>
@@ -115,17 +115,20 @@
 
 
         // ✅ ฟังก์ชันแสดงภาพสินค้าที่แพ็คแล้วใน Modal
-        function showPackedImage(imagePath) {
+        function showPackedImage(orderId) {
             const modal = document.getElementById('image-modal');
             const modalImg = document.getElementById('modal-image');
 
+            // ✅ ใช้ API `/orders/{order_id}/image` แทน `image_path` ตรงๆ
+            modalImg.src = `https://thesis-api.jintaphas.tech/packing/orders/${orderId}/image`;
+
             modal.style.display = "block";
-            modalImg.src = imagePath; // ✅ ใช้ path ที่ได้จาก API
 
             document.getElementById('close-modal').onclick = () => {
                 modal.style.display = "none";
             };
         }
+
     </script>
 
     <!-- ✅ Modal สำหรับแสดงรูปภาพสินค้าแพ็คแล้ว -->
