@@ -140,11 +140,46 @@
     </style>
 
     <script>
-        // เมื่อโหลดหน้าเว็บ ให้โหลดรายชื่อกล้องและรายการ packing orders
+        // ✅ โหลดออเดอร์ที่รับมาแล้วตอนเปิดหน้าเว็บ
+        async function loadCurrentOrder() {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+        
+            if (!token) return;
+        
+            try {
+                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/current`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+        
+                if (!response.ok) throw new Error("Failed to fetch order");
+        
+                const orderData = await response.json();
+        
+                // ✅ ถ้ามีออเดอร์ ให้แสดงผล & บันทึกลง localStorage
+                if (orderData.order_id) {
+                    localStorage.setItem("currentOrderId", orderData.order_id);
+                    displayOrderDetails(orderData);
+                } else {
+                    localStorage.removeItem("currentOrderId");  // ✅ ถ้าไม่มีออเดอร์ให้ลบ localStorage
+                    displayOrderDetails(null);
+                }
+        
+            } catch (error) {
+                console.error("❌ Error loading current order:", error.message);
+                displayOrderDetails(null);
+            }
+        }
+        
+
+        // ✅ โหลดข้อมูลเมื่อหน้าเว็บเปิด
         document.addEventListener('DOMContentLoaded', () => {
             loadCameraList();
             loadPackingOrders();
+            loadCurrentOrder();  // โหลดออเดอร์ที่รับอยู่
         });
+
     </script>
 
 </head>
@@ -206,6 +241,12 @@
         <!-- Detection Results -->
         <h3 class="text-lg font-bold mt-4">📋 รายการสิ่งที่ตรวจพบ:</h3>
         <div id="detection-list" class="bg-white shadow-md text-gray-700"></div>
+
+        <br>
+        <button class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+            onclick="verifyOrder(order_id, true)">✅ สินค้าครบ</button>
+        <button class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
+            onclick="verifyOrder(order_id, false)">❌ สินค้ายังไม่ครบ</button>
 
         <!-- Captured Image -->
         <h3 class="text-lg font-bold mt-4">🖼️ ภาพที่ถ่ายได้:</h3>
@@ -379,6 +420,7 @@
         }
 
         // ฟังก์ชันสำหรับให้พนักงานรับงาน (Claim Order)
+        // ✅ ฟังก์ชันสำหรับให้พนักงานรับออเดอร์
         async function claimOrder(orderId) {
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
@@ -405,19 +447,21 @@
                 const orderData = await response.json();
                 alert(`🎉 คุณได้รับออเดอร์ ${orderData.order_id} แล้ว!`);
 
-                // ✅ อัปเดต UI แสดงข้อมูลออเดอร์
+                // ✅ แสดงข้อมูลออเดอร์ที่รับไว้
                 displayOrderDetails(orderData);
 
                 // ✅ โหลดออเดอร์ที่ยังไม่ได้รับใหม่
                 loadPackingOrders();
 
             } catch (error) {
-                console.error("Error claiming order:", error.message);
+                console.error("❌ Error claiming order:", error.message);
                 alert("เกิดข้อผิดพลาดในการรับงาน: " + error.message);
             }
         }
 
 
+
+        // ✅ ฟังก์ชันแสดงข้อมูลออเดอร์ที่กำลังแพ็ค
         function displayOrderDetails(orderData) {
             const currentOrderDiv = document.getElementById('current-order');
 
@@ -443,9 +487,16 @@
                     <p><strong>📅 วันที่:</strong> ${orderData.created_at}</p>
                     <h4 class="text-lg font-bold mt-4">📦 รายการสินค้า</h4>
                     <ul class="mt-2">${itemsHtml}</ul>
+                    <br>
+                    <button class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+                        onclick="verifyOrder(${orderData.order_id}, true)">✅ สินค้าครบ</button>
+                    <button class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
+                        onclick="verifyOrder(${orderData.order_id}, false)">❌ สินค้ายังไม่ครบ</button>
                 </div>
             `;
         }
+
+
 
 
         // เปิดกล้อง
@@ -561,6 +612,27 @@
                 detectionList.innerHTML = `<div class="text-red-500 font-semibold">${error.message}</div>`;
             }
         });
+
+
+        async function verifyOrder(orderId, isVerified) {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+        
+            const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/verify`, {
+                method: "PUT",
+                headers: {
+                    "Authorization": `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ verified: isVerified })
+            });
+        
+            const result = await response.json();
+            alert(result.message);
+            window.location.reload();
+        }
+        
+
 
 
 

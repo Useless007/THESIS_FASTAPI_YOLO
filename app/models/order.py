@@ -1,6 +1,6 @@
 # app/models/order.py
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -12,12 +12,16 @@ class Order(Base):
     email = Column(String(100), nullable=False)
     item = Column(Text, nullable=False)  # เก็บ JSON หรือ Text
     total = Column(Float, nullable=False)
-    status = Column(String(10), default="pending")  # pending, cancelled, confirmed, packing, completed
+    status = Column(String(20), default="pending")  # pending, cancelled, confirmed, packing, completed
     created_at = Column(DateTime, default=datetime.utcnow)
     slip_path = Column(String(255), nullable=True)  # เก็บ path ของสลิปการโอนเงิน
 
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)  # พนักงานที่รับออเดอร์นี้
     camera_id = Column(Integer, ForeignKey("cameras.id"), nullable=True)  # กล้องที่ใช้ถ่ายออเดอร์นี้
+
+    # ✅ ฟิลด์ใหม่สำหรับตรวจสอบสินค้า
+    is_verified = Column(Boolean, default=False)  # true = สินค้าครบ, false = ยังตรวจไม่ครบ
+    image_path = Column(String(255), nullable=True)  # เก็บ path รูปสินค้าที่แพ็คแล้ว
 
     # เชื่อมโยงกับ User และ Camera
     user = relationship("User", backref="orders")

@@ -14,3 +14,6 @@ class OrderOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+class VerifyRequest(BaseModel):
+    verified: bool

@@ -2,13 +2,14 @@
 
 from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor
 import asyncio
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response, Request
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response, Request, Form
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.camera import Camera
 from app.models.order import Order
+from app.schemas.order import VerifyRequest
 from app.services.auth import get_user_with_role_and_position_and_isActive
 from app.database import get_db
 import subprocess,json,shutil,torch,os,cv2,traceback,threading
@@ -293,7 +294,7 @@ def get_packing_orders(
     """
     orders = db.query(Order)\
         .filter(or_(Order.assigned_to == None, Order.assigned_to == current_user.id))\
-        .filter(Order.status.in_(["packing", "in_progres"]))\
+        .filter(Order.status.in_(["packing", "verifying"]))\
         .all()
     return [
         {
@@ -317,8 +318,8 @@ def assign_order(
         .filter(
             and_(
                 Order.order_id == order_id,
-                Order.status == "packing",
-                Order.assigned_to == None
+                Order.status.in_(["packing", "pending"]),  # ตรวจสอบเฉพาะออเดอร์ที่ยังไม่ได้ยืนยัน
+                Order.assigned_to == None  # ยังไม่มีพนักงานรับ
             )
         )
         .with_for_update()
@@ -329,7 +330,7 @@ def assign_order(
         raise HTTPException(status_code=404, detail="Order not found or already assigned")
 
     order.assigned_to = current_user.id
-    order.status = "in_progress"
+    order.status = "verifying"
     db.commit()
     db.refresh(order)
 
@@ -362,3 +363,90 @@ def assign_order(
 
     return JSONResponse(content=order_data)
 
+@router.post("/orders/{order_id}/upload-image", response_class=JSONResponse)
+async def upload_packed_image(
+    order_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+):
+    """
+    อัปโหลดรูปสินค้าที่แพ็คเสร็จแล้ว และเก็บไว้ในฐานข้อมูล
+    """
+    order = db.query(Order).filter(Order.order_id == order_id, Order.assigned_to == current_user.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found or not assigned to you")
+
+    upload_dir = "uploads/packed_orders"
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, f"{order_id}.jpg")
+
+    # ✅ บันทึกไฟล์
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    order.image_path = file_path  # บันทึก path ไฟล์ลง database
+    db.commit()
+
+    return JSONResponse(content={"message": "Image uploaded successfully", "image_path": file_path})
+
+@router.put("/orders/{order_id}/verify", response_class=JSONResponse)
+def verify_order(
+    order_id: int,
+    request: VerifyRequest,  # ✅ รับค่าผ่าน Request Body แทน Query Parameter
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+):
+    """
+    อัปเดตสถานะออเดอร์ ว่าของครบหรือไม่ครบ
+    """
+    order = db.query(Order).filter(Order.order_id == order_id, Order.assigned_to == current_user.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found or not assigned to you")
+
+    order.is_verified = request.verified
+    order.status = "completed" if request.verified else "pending"
+    db.commit()
+
+    return JSONResponse(content={"message": "Order verification updated", "is_verified": request.verified})
+
+@router.get("/orders/current", response_class=JSONResponse)
+def get_current_order(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+):
+    """
+    ✅ ดึงข้อมูลออเดอร์ที่พนักงานกำลังแพ็คอยู่
+    """
+    order = db.query(Order).filter(
+        Order.assigned_to == current_user.id,  
+        Order.status.in_(["verifying", "packing"])  # ✅ ดึงเฉพาะออเดอร์ที่ยังไม่เสร็จ
+    ).order_by(Order.created_at.desc()).first()  # ✅ เอาออเดอร์ล่าสุดที่พนักงานทำอยู่
+
+    if not order:
+        return JSONResponse(content={"message": "No active order"}, status_code=200)
+
+    try:
+        items = json.loads(order.item)
+    except json.JSONDecodeError:
+        items = []
+
+    formatted_items = [
+        {
+            "product_id": item.get("product_id", "N/A"),
+            "product_name": item.get("name", "Unknown"),
+            "quantity": item.get("quantity", 0),
+            "price": item.get("price", 0.0),
+            "total": item.get("total", 0.0)
+        }
+        for item in items
+    ]
+
+    return JSONResponse(content={
+        "order_id": order.order_id,
+        "customer_email": order.email,
+        "total_price": order.total,
+        "items": formatted_items,
+        "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "image_path": order.image_path
+    })
