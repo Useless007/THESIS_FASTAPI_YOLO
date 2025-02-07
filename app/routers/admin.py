@@ -1,17 +1,21 @@
 # app/routers/admin.py
 
 import json
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, WebSocket, WebSocketDisconnect
+from typing import List
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from app.services.ws_manager import NotifyPayload, notify_admin
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date
 from app.models.user import User
 from app.models.order import Order
 from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
+from app.services.ws_manager import admin_connections
 from app.database import get_db
 from fastapi.templating import Jinja2Templates
 
+admin_connections: List[WebSocket] = []
 templates = Jinja2Templates(directory="app/templates")
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -22,6 +26,7 @@ def dashboard_redirect(
     request: Request,
     current_user: User = Depends(get_current_user)
 ):
+
     """
     ตรวจสอบบทบาทของผู้ใช้และเปลี่ยนเส้นทางไปยังแดชบอร์ดที่เหมาะสม
     """
@@ -39,8 +44,6 @@ def dashboard_redirect(
         return templates.TemplateResponse("preparation_dashboard.html", {"request": request, "current_user": current_user})
     else:
         raise HTTPException(status_code=403, detail="❌ Access Denied: Role or Position Invalid")
-
-
 
 # Route สำหรับดึงข้อมูลแดชบอร์ด
 @router.get("/dashboard-data")
@@ -87,6 +90,15 @@ def get_order_management(
     print(f"🛡️ Order Management Access by: {current_user.email}")
     return templates.TemplateResponse("admin_orders.html", {"request": request, "current_user": current_user})
 
+# Route สำหรับแสดงหน้าจัดการroles
+@router.get("/roles", response_class=HTMLResponse)
+def get_order_management(
+    request: Request,
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    print(f"🛡️ Order Management Access by: {current_user.email}")
+    return templates.TemplateResponse("admin_roles.html", {"request": request, "current_user": current_user})
+
 
 @router.get("/pending_order", response_class=JSONResponse)
 def get_pending_orders(
@@ -126,8 +138,40 @@ def get_pending_orders(
 
     return {"orders": orders_data}
 
+@router.websocket("/notifications")
+async def admin_notifications(websocket: WebSocket):
+    """
+    ✅ WebSocket สำหรับแจ้งเตือนแอดมินเมื่อออเดอร์ถูกเปลี่ยนเป็น `pending`
+    """
+    await websocket.accept()
+    admin_connections.append(websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()  # ✅ รอข้อความจาก Client (แต่อาจไม่ต้องใช้)
+    except WebSocketDisconnect:
+        admin_connections.remove(websocket)  # ✅ ลบ Connection ถ้าแอดมินหลุดออกจาก WebSocket
 
 
+@router.post("/trigger-notify")
+async def trigger_notify(payload: NotifyPayload, request: Request):
+    """
+    ✅ Endpoint ให้ Thesis-API เรียกเพื่อให้ Home แจ้งเตือน Admin ผ่าน WebSocket
+    """
+    message = {
+        "order_id": payload.order_id,
+        "message": f"⚠️ ออเดอร์ #{payload.order_id} เป็น PENDING - {payload.reason}",
+    }
+
+    # ตรวจสอบว่ามี Admin Online หรือไม่
+    if not admin_connections:
+        return {"status": "no_admin_online"}
+
+    # ส่งข้อความแจ้งเตือนไปให้ Admin ทุกคนที่เชื่อม WebSocket อยู่
+    for conn in admin_connections:
+        await conn.send_json(message)
+
+    return {"status": "notified", "sent_to": len(admin_connections)}
 
 
 # Route สำหรับอนุมัติออเดอร์
@@ -173,7 +217,6 @@ def change_user_role(
     db.commit()
     return {"message": f"✅ User {user_id} role updated to {role}"}
 
-
 # Route สำหรับยกเลิกออเดอร์
 @router.delete("/orders/{order_id}/cancel", response_class=JSONResponse)
 def cancel_order(
@@ -191,8 +234,6 @@ def cancel_order(
     db.delete(order)
     db.commit()
     return {"message": f"✅ Order {order_id} canceled successfully"}
-
-
 
 # Route สำหรับดึงข้อมูลผู้ใช้ที่ต้องการ Activate
 @router.get("/employees-to-activate", response_class=JSONResponse)

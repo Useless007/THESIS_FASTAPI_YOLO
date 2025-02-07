@@ -225,8 +225,13 @@
                 เปิดกล้อง</button>
             <button id="stop-camera" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">🛑
                 ปิดกล้อง</button>
-            <button id="capture" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">📷
-                ถ่ายภาพ</button>
+                <button id="capture" class="bg-blue-500 text-white px-6 py-3 rounded-lg shadow hover:bg-blue-600 flex items-center">
+                    <span id="button-text">📸 ถ่ายภาพ</span>
+                    <svg id="loading-spinner" class="hidden w-5 h-5 ml-2 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8z"></path>
+                    </svg>
+                  </button>
         </div>
 
         <!-- แสดงข้อมูลออเดอร์ที่รับ -->
@@ -274,9 +279,14 @@
         const stream = document.getElementById('stream');
         const detectionList = document.getElementById('detection-list');
         const capturedImage = document.getElementById('captured-image');
+
+
         const startCameraBtn = document.getElementById('start-camera');
         const stopCameraBtn = document.getElementById('stop-camera');
         const captureBtn = document.getElementById('capture');
+        const buttonText = document.getElementById("button-text");
+        const spinner = document.getElementById("loading-spinner");
+
         const modal = document.getElementById('image-modal');
         const modalImg = document.getElementById('modal-image');
         const closeModal = document.getElementById('close-modal');
@@ -284,6 +294,10 @@
         const cameraOffOverlay = document.getElementById('camera-off-overlay');
         const cameraDropdown = document.getElementById('camera-dropdown');
         const packingOrdersList = document.getElementById('packing-orders-list');
+        
+
+
+        
 
         let currentCamera = null; // เก็บข้อมูลกล้องที่เลือก
         loadingSpinner.style.display = 'none'; // ซ่อน spinner เมื่อเริ่มโหลดหน้าเว็บ
@@ -548,6 +562,12 @@
 
         captureBtn.addEventListener('click', async () => {
             try {
+
+                // แสดงสถานะกำลังโหลด
+                captureBtn.disabled = true;
+                buttonText.textContent = "กำลังถ่ายภาพ...";
+                spinner.classList.remove("hidden");
+
                 const token = document.cookie.split('; ')
                     .find(row => row.startsWith('Authorization='))?.split('=')[1];
 
@@ -583,6 +603,10 @@
                 const result = await detectResponse.json();
                 console.log('✅ Detection result:', result);
 
+                captureBtn.disabled = false;
+                buttonText.textContent = "📸 ถ่ายภาพ";
+                spinner.classList.add("hidden");
+
                 detectionList.innerHTML = '';
                 if (result.detections.length > 0) {
                     result.detections.forEach(det => {
@@ -601,6 +625,8 @@
                     modal.style.display = 'block';
                     modalImg.src = capturedImage.src;
                 };
+
+
             } catch (error) {
                 console.error('❌ Error capturing and detecting image:', error.message);
                 detectionList.innerHTML = `<div class="text-red-500 font-semibold">${error.message}</div>`;

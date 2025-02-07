@@ -11,6 +11,17 @@
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
 
+    <!-- ตรวจสอบการล็อกอิน หากพบจะ redirect ไปหน้าแรก -->
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith("Authorization="));
+            if (token) {
+                window.location.href = "/";
+            }
+        });
+    </script>
+
     <script> // tailwind.config
         tailwind.config = {
             darkMode: 'class',

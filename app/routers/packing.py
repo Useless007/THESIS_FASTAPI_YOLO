@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor
 import asyncio
+import requests
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response, Request, Form
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from sqlalchemy import and_, or_
@@ -399,37 +400,48 @@ async def verify_order(
     current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
 ):
     """
-    ✅ อัปเดตสถานะออเดอร์ ว่าของครบหรือไม่ครบ และบันทึกรูปภาพ
+    ✅ พนักงานกดยืนยันสินค้าครบหรือไม่ครบ
     """
     order = db.query(Order).filter(Order.order_id == order_id, Order.assigned_to == current_user.id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found or not assigned to you")
 
-    print(f"✅ รับค่า verified: {verified}")
-    print(f"✅ รับไฟล์: {file.filename if file else 'ไม่มีไฟล์'}")
-
-    # ✅ ถ้าไม่มีภาพ และออเดอร์ไม่มีรูปมาก่อน → แจ้งเตือน
     if not file and not order.image_path:
         raise HTTPException(status_code=400, detail="กรุณาตรวจจับสินค้าก่อน")
 
-    # ✅ ถ้ามีการอัปโหลดไฟล์ภาพ ให้บันทึกลงฐานข้อมูล
     if file:
         upload_dir = "uploads/packed_orders"
         os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, f"{order_id}.jpg")
-
+        file_path = os.path.join(upload_dir, f"{order_id}.jpg").replace("\\", "/")
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        order.image_path = file_path
 
-        order.image_path = file_path  # ✅ บันทึก path รูปภาพลงฐานข้อมูล
+    # ✅ ถ้าสินค้าไม่ครบ → เปลี่ยนสถานะเป็น "pending" และแจ้งเตือนแอดมิน
+    if not verified:
+        order.status = "pending"
+        db.commit()
 
-    # ✅ อัปเดตสถานะออเดอร์
+        # ✅ ส่ง HTTP Request ไปยัง Home เพื่อให้แจ้งเตือน Admin
+        try:
+            url = "https://home.jintaphas.tech/admin/trigger-notify"
+            payload = {
+                "order_id": order_id,
+                "reason": "สินค้าไม่ครบ"
+            }
+            resp = requests.post(url, json=payload, timeout=5)
+            print("Notify admin response:", resp.status_code, resp.text)
+        except Exception as e:
+            print("Error calling home to notify admin:", e)
+
+        return JSONResponse(content={"message": "Order marked as pending", "order_id": order_id, "status": "pending"})
+
+    # ✅ ถ้าสินค้าครบ → อัปเดตเป็น "completed"
     order.is_verified = verified
-    order.status = "completed" if verified else "pending"
+    order.status = "completed"
     db.commit()
 
-    return JSONResponse(content={"message": "Order verification updated", "is_verified": verified, "image_path": order.image_path})
-
+    return JSONResponse(content={"message": "Order verification updated", "order_id": order_id, "status": "completed"})
 
 @router.get("/orders/current", response_class=JSONResponse)
 def get_current_order(

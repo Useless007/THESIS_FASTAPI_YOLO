@@ -8,6 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Masterleng Shop</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
 
@@ -273,8 +274,10 @@
                         เพิ่มประสิทธิภาพธุรกิจและการใช้ชีวิตของคุณวันนี้!
                     </p>
                     <a href="/register"
-                        class="flex-none rounded-full bg-blue-600 px-3.5 py-1 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">ช้อปเลย
-                        <span aria-hidden="true">&rarr;</span></a>
+                        class="flex-none rounded-full bg-blue-600 px-3.5 py-1 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+                        ช้อปเลย
+                        <span aria-hidden="true">&rarr;</span>
+                    </a>
                 </div>
                 <div class="flex flex-1 justify-end">
                     <button type="button" class="-m-3 p-3 focus-visible:outline-offset-[-4px]"
@@ -313,21 +316,10 @@
                 <!-- Carousel wrapper -->
                 <div class="relative h-56 overflow-hidden rounded-lg md:h-96">
                     <!-- Item 1 -->
-                    <div class="hidden duration-200 ease-linear" data-carousel-item>
-                        <img src="https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_640.png"
-                            class="absolute block w-full -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2" alt="...">
-
-                    </div>
-                    <!-- Item 2 -->
-                    <div class="hidden duration-200 ease-linear" data-carousel-item>
-                        <img src="https://png.pngtree.com/element_our/20190529/ourmid/pngtree-user-cartoon-avatar-pattern-image_1200086.jpg"
-                            class="absolute block w-full -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2" alt="...">
-                    </div>
-                    <!-- Item 3 -->
                     <div class="hidden duration-200 ease-linear" data-carousel-item="active">
                         <img src="/static/assets/Carousel1.png"
                             class="absolute block w-full -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2" alt="...">
-                        <div
+                        <!-- <div
                             class="absolute top-1/4 left-1/3  transform -translate-x-1/2 text-left text-white z-20 bg-black/60 p-4 rounded-lg">
                             <h2 class="text-xl font-bold md:text-4xl">ก้าวสู่อนาคตกับ MasterLeng Shop</h2>
                             <p class="mt-2 text-xs md:text-lg">ค้นพบสินค้า IoT ล้ำสมัย
@@ -336,23 +328,13 @@
                                 class="inline-block mt-4 px-4 py-2 text-sm md:text-lg font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
                                 ช้อปสินค้าคุณภาพเลยตอนนี้
                             </a>
-                        </div>
+                        </div> -->
 
                     </div>
-                    <!-- Item 4 -->
-                    <div class="hidden duration-200 ease-linear" data-carousel-item>
-                        <img src="https://png.pngtree.com/element_our/20190529/ourmid/pngtree-user-cartoon-avatar-pattern-image_1200086.jpg"
-                            class="absolute block w-full -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2" alt="...">
-                    </div>
-                    <!-- Item 5 -->
-                    <div class="hidden duration-200 ease-linear" data-carousel-item>
-                        <img src="https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_640.png"
-                            class="absolute block w-full -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2" alt="...">
 
-                    </div>
                 </div>
                 <!-- Slider controls -->
-                <button type="button"
+                <!-- <button type="button"
                     class="absolute top-0 start-0 z-30 flex items-center justify-center h-full px-4 cursor-pointer group focus:outline-none"
                     data-carousel-prev>
                     <span
@@ -377,7 +359,7 @@
                         </svg>
                         <span class="sr-only">Next</span>
                     </span>
-                </button>
+                </button> -->
             </div>
 
             <br>
@@ -702,6 +684,8 @@
 
                 // ตรวจสอบ JWT Token
                 if (token && token.startsWith('Bearer')) {
+                    hidePromoBanner();
+
                     document.getElementById('logout-button').classList.remove('hidden');
                     document.getElementById('login-button').classList.add('hidden');
                     // console.log("✅ User is logged in");
@@ -750,6 +734,13 @@
             // บันทึกลง LocalStorage
             localStorage.setItem('cart', JSON.stringify(cart));
             console.log('🛒 ตะกร้าสินค้า:', cart);
+            Swal.fire({
+                title: 'เพิ่มสินค้าลงตะกร้าแล้ว!',
+                text: `${name} ถูกเพิ่มไปยังตะกร้าของคุณ`,
+                icon: 'success',
+                timer: 1500,
+                showConfirmButton: false
+            });
         }
 
 
