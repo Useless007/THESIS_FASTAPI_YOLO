@@ -124,11 +124,19 @@ async def checkout(
 @router.get("/logout", response_class=RedirectResponse)
 def logout():
     """
-    ออกจากระบบและล้าง Token ใน Cookie
+    ✅ ออกจากระบบและล้าง Token ใน Cookie
     """
     response = RedirectResponse(url="/login", status_code=303)
-    response.delete_cookie("Authorization")
+
+    # ✅ ลบ Cookie โดยต้องระบุ `domain` และ `path` ให้ตรงกัน
+    response.delete_cookie(
+        key="Authorization",
+        path="/", 
+        domain=".jintaphas.tech"  # ✅ ต้องตรงกับตอนเซ็ต Cookie
+    )
+
     return response
+
 
 
 @router.get("/my-orders", response_class=HTMLResponse)

@@ -7,19 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <title>Roles Management</title>
-    <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
-
-    <style>
-        #fullscreenModal {
-            backdrop-filter: blur(10px);
-        }
-    </style>
-
 </head>
 
 <body class="bg-gray-100">
-
-    <!-- Navbar -->
     <nav class="bg-white shadow-md p-4">
         <div class="max-w-screen-xl mx-auto flex justify-between items-center">
             <a href="/admin/dashboard" class="text-xl font-bold">👑 Roles Management</a>
@@ -27,191 +17,106 @@
         </div>
     </nav>
 
-    <!-- Main Content -->
     <main class="p-8">
-        <div class="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
-            <h1 class="text-5xl font-bold text-center">Roles Management</h1>
-            <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg mt-10">
-                <ul role="list" class="divide-y divide-gray-200 opacity-100" id="order-list">
-                    <!-- รายการออเดอร์จะแสดงที่นี่ -->
-                </ul>
-            </div>
+        <div class="mx-auto max-w-4xl">
+            <h1 class="text-3xl font-bold text-center">จัดการบทบาท</h1>
+            <table class="min-w-full bg-white shadow-md rounded-lg mt-6">
+                <thead>
+                    <tr>
+                        <th class="py-2 px-4 border-b">ชื่อ</th>
+                        <th class="py-2 px-4 border-b">บทบาท</th>
+                        <th class="py-2 px-4 border-b">ตำแหน่ง</th>
+                        <th class="py-2 px-4 border-b">การจัดการ</th>
+                    </tr>
+                </thead>
+                <tbody id="roles-list">
+                    <!-- รายการบทบาทจะแสดงที่นี่ -->
+                </tbody>
+            </table>
         </div>
     </main>
 
-    <!-- Modal Popup for Order Details -->
-    <div id="orderModal" class="fixed inset-0 hidden bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full">
-        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <h3 class="text-lg font-semibold">📝 รายละเอียดออเดอร์</h3>
-            <div class="mt-2 space-y-2">
-                <p><strong>📧 อีเมล:</strong> <span id="modal-email"></span></p>
-                <p><strong>📦 สินค้า:</strong> <span id="modal-item"></span></p>
-                <p><strong>💵 ราคารวม:</strong> ฿<span id="modal-total"></span></p>
-                <p><strong>📅 วันที่สร้าง:</strong> <span id="modal-created"></span></p>
-                <p><strong>🖼️ สลิปการโอนเงิน:</strong></p>
-                <div class="mt-2">
-                    <img id="modal-slip" src="" alt="สลิปการโอนเงิน"
-                        class="w-full h-48 object-contain border rounded-md" />
-                </div>
-            </div>
-            <div class="mt-4 flex justify-end space-x-2">
-                <button onclick="closeModal()" class="bg-gray-500 text-white px-4 py-2 rounded-md">ปิด</button>
-                <button onclick="approveOrder()" class="bg-green-500 text-white px-4 py-2 rounded-md">✔ อนุมัติ</button>
-                <button onclick="cancelOrder()" class="bg-red-500 text-white px-4 py-2 rounded-md">❌ ยกเลิก</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Fullscreen Image Modal -->
-    <div id="fullscreenModal" class="fixed inset-0 hidden bg-black bg-opacity-90 flex justify-center items-center z-50">
-        <span class="absolute top-4 right-4 text-white text-4xl cursor-pointer"
-            onclick="closeFullscreenModal()">&times;</span>
-        <img id="fullscreen-image" src="" alt="สลิปการโอนเงิน" class="max-w-full max-h-full object-contain">
-    </div>
-
-
     <script>
-        let selectedOrderId = null; // เก็บ ID ของออเดอร์ที่ถูกเลือก
-
-        // ดึงข้อมูลคำสั่งซื้อพร้อมสลิป
-        $(document).ready(function () {
-            $.getJSON("/admin/pending_order", function (data) {
-                var orderList = $("#order-list");
-                orderList.empty(); // ล้างรายการเก่า
-
-                data.orders.forEach(function (order) {
-                    let items = Array.isArray(order.item) ? order.item : [];
-
-                    let itemList = items.map(item => {
-                        if (item.error) {
-                            return `<span class="text-red-500">❌ ${item.error}</span>`;
-                        }
-                        return `${item.name} (x${item.quantity})`;
-                    }).join(', ');
-
-                    var listItem = `
-                <li data-id="${order.id}">
-                    <div class="block hover:bg-gray-50">
-                        <div class="px-4 py-4 sm:px-6">
-                            <div class="flex items-center justify-between">
-                                <div class="truncate text-sm font-medium text-indigo-600">
-                                    อีเมล: ${order.email}
-                                </div>
-                            </div>
-                            <div class="mt-2 flex justify-between">
-                                <div class="text-sm text-gray-500">
-                                    สินค้า: ${itemList}
-                                </div>
-                                <button onclick="openModal(
-                                    ${order.id}, 
-                                    '${order.email}', 
-                                    '${encodeURIComponent(JSON.stringify(items))}', 
-                                    ${order.total}, 
-                                    '${order.created_at}', 
-                                    '${order.slip_path || ''}'
-                                )" class="bg-blue-200 rounded p-2">🔍 ดูรายละเอียด</button>
-                            </div>
-                        </div>
-                    </div>
-                </li>
-            `;
-                    orderList.append(listItem);
+        function fetchRoles() {
+            $.getJSON("/admin/users", function (data) {
+                var rolesList = "";
+                data.forEach(user => {
+                    rolesList += `
+                        <tr>
+                            <td class="py-2 px-4 border-b">${user.name}</td>
+                            <td class="py-2 px-4 border-b">
+                                <select onchange="updateRole(${user.id}, this.value)">
+                                    <option value="customer" ${user.role === "customer" ? "selected" : ""}>Customer</option>
+                                    <option value="employee" ${user.role === "employee" ? "selected" : ""}>Employee</option>
+                                </select>
+                            </td>
+                            <td class="py-2 px-4 border-b">
+                                <select onchange="updatePosition(${user.id}, this.value)">
+                                    <option value="admin" ${user.position === "admin" ? "selected" : ""}>Admin</option>
+                                    <option value="preparation staff" ${user.position === "preparation staff" ? "selected" : ""}>Preparation Staff</option>
+                                    <option value="packing staff" ${user.position === "packing staff" ? "selected" : ""}>Packing Staff</option>
+                                </select>
+                            </td>
+                            <td class="py-2 px-4 border-b">
+                                <button onclick="deleteRole(${user.id})" class="bg-red-500 text-white px-2 py-1 rounded">ลบ</button>
+                            </td>
+                        </tr>`;
                 });
+                $("#roles-list").html(rolesList);
             });
-        });
+        }
 
+        function updateRole(userId, newRole) {
+            $.ajax({
+                url: `/admin/users/${userId}/update-role`,
+                type: "PUT",
+                contentType: "application/json",
+                data: JSON.stringify({ role: newRole }),
+                success: function () {
+                    alert("✅ บทบาทถูกอัปเดตสำเร็จ");
+                    fetchRoles();
+                },
+                error: function () {
+                    alert("❌ อัปเดตบทบาทล้มเหลว");
+                }
+            });
+        }
 
-        // เปิด Modal พร้อมแสดงสลิป
-        function openModal(orderId, email, item, total, created_at, slipPath) {
-            selectedOrderId = orderId; // บันทึก ID ของออเดอร์ที่เลือก
+        function updatePosition(userId, newPosition) {
+            $.ajax({
+                url: `/admin/users/${userId}/update-position`,
+                type: "PUT",
+                contentType: "application/json",
+                data: JSON.stringify({ position: newPosition }),
+                success: function () {
+                    alert("✅ ตำแหน่งถูกอัปเดตสำเร็จ");
+                    fetchRoles();
+                },
+                error: function () {
+                    alert("❌ อัปเดตตำแหน่งล้มเหลว");
+                }
+            });
+        }
 
-            let parsedItems = JSON.parse(decodeURIComponent(item));
-            let itemList = parsedItems.map(item => `📌 ${item.name} (x${item.quantity})`).join('<br>');
-
-            $('#modal-email').text(email);
-            $('#modal-item').html(itemList); // ใช้ .html() แทน .text() เพื่อรองรับ <br>
-            $('#modal-total').text(total);
-            $('#modal-created').text(created_at);
-
-
-
-
-            if (slipPath) {
-                $('#modal-slip').attr('src', slipPath).show();
-
-                // เพิ่ม Event Listener สำหรับคลิกที่รูป
-                $('#modal-slip').off('click').on('click', function () {
-                    openFullscreenModal(slipPath);
+        function deleteRole(userId) {
+            if (confirm("⚠️ ต้องการลบผู้ใช้นี้จริงหรือไม่?")) {
+                $.ajax({
+                    url: `/admin/users/${userId}`,
+                    type: "DELETE",
+                    success: function () {
+                        alert("✅ ผู้ใช้ถูกลบสำเร็จ");
+                        fetchRoles();
+                    },
+                    error: function () {
+                        alert("❌ ลบผู้ใช้ล้มเหลว");
+                    }
                 });
-            } else {
-                $('#modal-slip').attr('src', '').hide();
             }
-
-            $('#orderModal').removeClass('hidden');
         }
 
-        // เปิด Modal แบบเต็มจอ
-        function openFullscreenModal(imagePath) {
-            $('#fullscreen-image').attr('src', imagePath);
-            $('#fullscreenModal').removeClass('hidden');
-        }
-
-        // ปิด Modal แบบเต็มจอ
-        function closeFullscreenModal() {
-            $('#fullscreenModal').addClass('hidden');
-            $('#fullscreen-image').attr('src', '');
-        }
-        // ปิด Modal
-        function closeModal() {
-            $('#orderModal').addClass('hidden');
-        }
-
-
-        // Approve Order
-        function approveOrder() {
-            console.log("🔄 กำลังอนุมัติออเดอร์", selectedOrderId);
-
-            $.ajax({
-                url: `/admin/orders/${selectedOrderId}/approve`,
-                type: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                success: function (response) {
-                    console.log("✅ อนุมัติออเดอร์สำเร็จ:", response);
-                    alert(`✅ Order ${selectedOrderId} approved successfully.`);
-                    $(`#order-list li[data-id="${selectedOrderId}"]`).remove(); // ลบออเดอร์ออกจากรายการ
-                    closeModal();
-                },
-                error: function (xhr, status, error) {
-                    console.error("❌ เกิดข้อผิดพลาด:", xhr.responseJSON.detail || error);
-                    alert(`❌ Failed to approve order: ${xhr.responseJSON.detail || error}`);
-                }
-            });
-        }
-
-        // Cancel Order
-        function cancelOrder() {
-            console.log("🗑️ กำลังยกเลิกออเดอร์", selectedOrderId);
-
-            $.ajax({
-                url: `/admin/orders/${selectedOrderId}/cancel`,
-                type: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                success: function (response) {
-                    console.log("✅ ยกเลิกออเดอร์สำเร็จ:", response);
-                    alert(`✅ Order ${selectedOrderId} canceled successfully.`);
-                    $(`#order-list li[data-id="${selectedOrderId}"]`).remove(); // ลบออเดอร์ออกจากรายการ
-                    closeModal();
-                },
-                error: function (xhr, status, error) {
-                    console.error("❌ เกิดข้อผิดพลาด:", xhr.responseJSON.detail || error);
-                    alert(`❌ Failed to cancel order: ${xhr.responseJSON.detail || error}`);
-                }
-            });
-        }
+        $(document).ready(function () {
+            fetchRoles();
+        });
     </script>
 </body>
 

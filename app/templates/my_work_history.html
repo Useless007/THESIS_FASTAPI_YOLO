@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>ประวัติการทำงานของฉัน</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+</head>
+
+<body class="bg-gray-100">
+    <nav class="bg-white shadow-md p-4">
+        <div class="max-w-screen-xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">
+                📋 ประวัติการทำงานของฉัน
+            </h1>
+            <a href="/settings" class="text-blue-500 hover:underline">กลับสู่หน้าตั้งค่า</a>
+        </div>
+    </nav>
+
+    <main class="p-8">
+        <div class="mx-auto max-w-7xl">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="mb-6">
+                    <label for="date" class="block text-sm font-medium text-gray-700">เลือกวันที่</label>
+                    <input type="date" id="date" name="date"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        value="">
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col"
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    เลขออเดอร์
+                                </th>
+                                <th scope="col"
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    โต๊ะ
+                                </th>
+                                <th scope="col"
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    สถานะ
+                                </th>
+                                <th scope="col"
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    เวลา
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="workHistory" class="bg-white divide-y divide-gray-200">
+                            <!-- ข้อมูลจะถูกเพิ่มที่นี่ด้วย JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="noData" class="text-center py-4 hidden">
+                    <p class="text-gray-500">ไม่พบข้อมูลการทำงานในวันที่เลือก</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // ตั้งค่าวันที่เริ่มต้นเป็นวันนี้
+        const dateInput = document.getElementById('date');
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+
+        // ฟังก์ชันสำหรับโหลดข้อมูลการทำงาน
+        async function loadWorkHistory(date) {
+            try {
+                const response = await fetch(`/admin/my-work-status?date=${date}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+                    }
+                });
+                const data = await response.json();
+                
+                const workHistoryTable = document.getElementById('workHistory');
+                const noDataDiv = document.getElementById('noData');
+                
+                // เคลียร์ข้อมูลเก่า
+                workHistoryTable.innerHTML = '';
+                
+                if (data.my_work_status && data.my_work_status.length > 0) {
+                    noDataDiv.classList.add('hidden');
+                    
+                    data.my_work_status.forEach(order => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                ${order.order_id}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                ${order.table_number}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                ${getStatusBadge(order.status)}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                ${order.created_at}
+                            </td>
+                        `;
+                        workHistoryTable.appendChild(row);
+                    });
+                } else {
+                    noDataDiv.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error loading work history:', error);
+                alert('เกิดข้อผิดพลาดในการโหลดข้อมูล');
+            }
+        }
+
+        // ฟังก์ชันสำหรับแสดงสถานะด้วยสี
+        function getStatusBadge(status) {
+            const statusClasses = {
+                'pending': 'bg-yellow-100 text-yellow-800',
+                'in_progress': 'bg-blue-100 text-blue-800',
+                'completed': 'bg-green-100 text-green-800',
+                'cancelled': 'bg-red-100 text-red-800'
+            };
+            
+            const statusText = {
+                'pending': 'รอดำเนินการ',
+                'in_progress': 'กำลังดำเนินการ',
+                'completed': 'เสร็จสิ้น',
+                'cancelled': 'ยกเลิก'
+            };
+
+            const className = statusClasses[status] || 'bg-gray-100 text-gray-800';
+            return `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${className}">
+                ${statusText[status] || status}
+            </span>`;
+        }
+
+        // เพิ่ม event listener สำหรับการเปลี่ยนวันที่
+        dateInput.addEventListener('change', (e) => {
+            loadWorkHistory(e.target.value);
+        });
+
+        // โหลดข้อมูลครั้งแรก
+        loadWorkHistory(today);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <title>Work Status Logs</title>
+</head>
+
+<body class="bg-gray-100">
+    <nav class="bg-white shadow-md p-4">
+        <div class="max-w-screen-xl mx-auto flex justify-between items-center">
+            <a href="/admin/dashboard" class="text-xl font-bold">📋 Work Status Logs</a>
+            <a href="/" class="text-blue-500 hover:underline">กลับสู่หน้าแรก</a>
+        </div>
+    </nav>
+
+    <main class="p-8">
+        <div class="mx-auto max-w-4xl">
+            <h1 class="text-3xl font-bold text-center">ตรวจสอบสถานะการทำงานรายวัน</h1>
+            <div class="flex justify-center my-4">
+                <input type="date" id="date-picker" class="p-2 border rounded-md" />
+                <button onclick="fetchWorkStatus()"
+                    class="bg-blue-500 text-white px-4 py-2 rounded-md ml-2">ค้นหา</button>
+            </div>
+            <table class="min-w-full bg-white shadow-md rounded-lg mt-6">
+                <thead>
+                    <tr>
+                        <th class="py-2 px-4 border-b">โต๊ะ</th>
+                        <th class="py-2 px-4 border-b">พนักงาน</th>
+                        <th class="py-2 px-4 border-b">สถานะ</th>
+                        <th class="py-2 px-4 border-b">เวลาทำงาน</th>
+                    </tr>
+                </thead>
+                <tbody id="status-list">
+                    <!-- ข้อมูลโหลดจาก API -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        function fetchWorkStatus() {
+            let selectedDate = $("#date-picker").val();
+            if (!selectedDate) {
+                alert("⚠️ กรุณาเลือกวันที่ก่อน");
+                return;
+            }
+
+            $.getJSON(`/admin/work-status?date=${selectedDate}`, function (data) {
+                let statusList = "";
+                data.work_status.forEach(status => {
+                    statusList += `
+                        <tr>
+                            <td class="py-2 px-4 border-b">${status.table_number}</td>
+                            <td class="py-2 px-4 border-b">${status.employee_name}</td>
+                            <td class="py-2 px-4 border-b">${status.status}</td>
+                            <td class="py-2 px-4 border-b">${status.created_at}</td>
+                        </tr>`;
+                });
+                $("#status-list").html(statusList);
+            }).fail(function () {
+                alert("❌ ไม่สามารถโหลดข้อมูลได้");
+            });
+        }
+    </script>
+</body>
+
+</html>

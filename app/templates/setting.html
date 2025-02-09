@@ -1,0 +1,189 @@
+<!-- app/templates/admin_dashboard.html -->
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <title>Settings</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+</head>
+
+<body class="bg-gray-100">
+    <nav class="bg-white shadow-md p-4">
+        <div class="max-w-screen-xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">
+                📋 Settings
+            </h1>
+            <a href="/" class="text-blue-500 hover:underline">กลับสู่หน้าแรก</a>
+        </div>
+    </nav>
+
+    <main class="p-8">
+
+
+        <div class="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
+
+
+            <div class="mx-auto max-w-none">
+                <h2 class="text-2xl font-bold mb-4">ตั้งค่า</h2>
+                
+
+                <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg mt-10">
+                    <ul role="list" class="divide-y divide-gray-200 opacity-100">
+                        <li id="work-history-option" class="hidden">
+                            <a href="/admin/my-work-history" class="block hover:bg-gray-50">
+                                <div class="px-4 py-4 sm:px-6">
+                                    <div class="flex items-center justify-between">
+                                        <div class="truncate text-sm font-medium text-indigo-600">
+                                            ประวัติการทำงานของฉัน
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        </li>
+                        <li>
+                            <button onclick="openResetPasswordModal()" class="w-full text-left block hover:bg-gray-50">
+                                <div class="px-4 py-4 sm:px-6">
+                                    <div class="flex items-center justify-between">
+                                        <div class="truncate text-sm font-medium text-indigo-600">
+                                            รีเซ็ตรหัสผ่าน
+                                        </div>
+                                    </div>
+                                </div>
+                            </button>
+                        </li>
+                        
+
+
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal สำหรับรีเซ็ตรหัสผ่าน -->
+    <div id="resetPasswordModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">รีเซ็ตรหัสผ่าน</h3>
+                <form id="resetPasswordForm" class="space-y-4">
+                    <div>
+                        <label for="currentPassword" class="block text-sm font-medium text-gray-700">รหัสผ่านปัจจุบัน</label>
+                        <input type="password" id="currentPassword" name="currentPassword" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="newPassword" class="block text-sm font-medium text-gray-700">รหัสผ่านใหม่</label>
+                        <input type="password" id="newPassword" name="newPassword" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="confirmPassword" class="block text-sm font-medium text-gray-700">ยืนยันรหัสผ่านใหม่</label>
+                        <input type="password" id="confirmPassword" name="confirmPassword" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div class="flex justify-end space-x-3 mt-4">
+                        <button type="button" onclick="closeResetPasswordModal()"
+                            class="px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md">
+                            ยกเลิก
+                        </button>
+                        <button type="submit"
+                            class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700">
+                            บันทึก
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openResetPasswordModal() {
+            document.getElementById('resetPasswordModal').classList.remove('hidden');
+        }
+
+        function closeResetPasswordModal() {
+            document.getElementById('resetPasswordModal').classList.add('hidden');
+            document.getElementById('resetPasswordForm').reset();
+        }
+
+        document.getElementById('resetPasswordForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (newPassword !== confirmPassword) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'รหัสผ่านไม่ตรงกัน',
+                    text: 'กรุณากรอกรหัสผ่านใหม่และยืนยันรหัสผ่านให้ตรงกัน'
+                });
+                return;
+            }
+
+            try {
+                const response = await fetch('/reset-password', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+                    },
+                    body: new URLSearchParams({
+                        'current_password': currentPassword,
+                        'new_password': newPassword
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'สำเร็จ',
+                        text: 'รีเซ็ตรหัสผ่านเรียบร้อยแล้ว'
+                    });
+                    closeResetPasswordModal();
+                } else {
+                    // แสดงข้อความ error ที่ได้จาก backend
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'เกิดข้อผิดพลาด',
+                        text: data.detail || 'ไม่สามารถรีเซ็ตรหัสผ่านได้'
+                    });
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้'
+                });
+            }
+        });
+
+        // เช็คบทบาทและตำแหน่งของผู้ใช้
+        fetch('/role-check', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            // แสดงประวัติการทำงานเฉพาะ employee ตำแหน่ง packing staff
+            if (data.role === 'employee' && data.position === 'packing staff') {
+                document.getElementById('work-history-option').classList.remove('hidden');
+            }
+        })
+        .catch(error => console.error('Error checking role:', error));
+    </script>
+
+</body>
+
+</html>

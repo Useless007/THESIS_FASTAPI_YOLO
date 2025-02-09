@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from app.services.ws_manager import NotifyPayload, notify_admin
 from datetime import datetime
 from sqlalchemy.orm import Session
-from sqlalchemy import func, cast, Date
+from sqlalchemy import func, cast, Date, and_, or_
 from app.models.user import User
 from app.models.order import Order
 from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
@@ -90,6 +90,106 @@ def get_order_management(
     print(f"🛡️ Order Management Access by: {current_user.email}")
     return templates.TemplateResponse("admin_orders.html", {"request": request, "current_user": current_user})
 
+@router.get("/users", response_class=JSONResponse)
+def get_all_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    """
+    ✅ ดึงข้อมูลผู้ใช้ทั้งหมดสำหรับจัดการบทบาทและตำแหน่ง
+    """
+    users = db.query(User).all()
+    user_data = [{"id": user.id, "name": user.name, "role": user.role, "position": user.position} for user in users]
+    return user_data
+
+    """
+    ✅ ดึงข้อมูลผู้ใช้ทั้งหมดสำหรับจัดการบทบาท
+    """
+    users = db.query(User).all()
+    user_data = [{"id": user.id, "name": user.name, "role": user.role} for user in users]
+    return user_data
+
+@router.put("/users/{user_id}/update-role", response_class=JSONResponse)
+def update_user_role(
+    user_id: int,
+    role_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    new_role = role_data.get("role")
+    if not new_role or new_role not in ["customer", "employee"]:
+        raise HTTPException(status_code=400, detail="❌ Invalid role specified")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="❌ User not found")
+    
+    user.role = new_role
+    db.commit()
+    return {"message": f"✅ บทบาทของผู้ใช้ {user_id} ถูกอัปเดตเป็น {new_role}"}
+
+    """
+    ✅ อัปเดตบทบาทของผู้ใช้
+    """
+    new_role = role_data.get("role")
+    if new_role not in ["admin", "packing staff", "preparation staff"]:
+        raise HTTPException(status_code=400, detail="❌ Invalid role specified")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="❌ User not found")
+
+    user.role = "employee"
+    user.position = new_role
+    db.commit()
+
+    return {"message": f"✅ บทบาทของผู้ใช้ {user_id} ถูกอัปเดตเป็น {new_role}"}
+
+@router.put("/users/{user_id}/update-position", response_class=JSONResponse)
+def update_user_position(
+    user_id: int,
+    position_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    """
+    ✅ อัปเดตตำแหน่ง (Position) ของผู้ใช้
+    """
+    new_position = position_data.get("position")
+    valid_positions = ["admin", "preparation staff", "packing staff"]
+
+    if new_position not in valid_positions:
+        raise HTTPException(status_code=400, detail="❌ Invalid position specified")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="❌ User not found")
+
+    user.position = new_position
+    db.commit()
+
+    return {"message": f"✅ ตำแหน่งของผู้ใช้ {user_id} ถูกอัปเดตเป็น {new_position}"}
+
+
+@router.delete("/users/{user_id}", response_class=JSONResponse)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    """
+    ✅ ลบผู้ใช้จากระบบ
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="❌ User not found")
+
+    db.delete(user)
+    db.commit()
+    
+    return {"message": f"✅ ผู้ใช้ {user_id} ถูกลบสำเร็จ"}
+
+
 # Route สำหรับแสดงหน้าจัดการroles
 @router.get("/roles", response_class=HTMLResponse)
 def get_order_management(
@@ -98,6 +198,15 @@ def get_order_management(
 ):
     print(f"🛡️ Order Management Access by: {current_user.email}")
     return templates.TemplateResponse("admin_roles.html", {"request": request, "current_user": current_user})
+
+# Route สำหรับแสดงหน้าจัดการ
+@router.get("/working-status", response_class=HTMLResponse)
+def get_working_logs(
+    request: Request,
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    print(f"🛡️ Order Management Access by: {current_user.email}")
+    return templates.TemplateResponse("admin_logs.html", {"request": request, "current_user": current_user})
 
 
 @router.get("/pending_order", response_class=JSONResponse)
@@ -264,3 +373,73 @@ def get_customers_to_activate(
         for customer in customers
     ]
     return {"customers": customer_data}
+
+@router.get("/work-status", response_class=JSONResponse)
+def get_work_status(
+    date: str,  # รับวันที่ที่ต้องการดูข้อมูล เช่น "2024-02-01"
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    """
+    ✅ ดึงสถานะการทำงานของพนักงานแต่ละโต๊ะตามวันที่
+    """
+    orders = db.query(Order).filter(and_(
+        Order.created_at >= f"{date} 00:00:00",
+        Order.created_at <= f"{date} 23:59:59"
+    )).all()
+
+    order_data = [
+        {
+            "order_id": order.order_id,
+            "table_number": order.camera.table_number if order.camera else "N/A",
+            "employee_name": order.user.name if order.user else "N/A",
+            "status": order.status,  # เช่น pending, packing, completed
+            "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        for order in orders
+    ]
+    return {"work_status": order_data}
+
+@router.get("/my-work-status", response_class=JSONResponse)
+def get_my_work_status(
+    date: str,  # รับวันที่ที่ต้องการดูข้อมูล
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # ให้พนักงานทุกตำแหน่งเข้าถึง
+):
+    """
+    ✅ ให้พนักงานดูสถานะของตนเองในแต่ละวัน
+    """
+    orders = db.query(Order).filter(and_(
+        Order.assigned_to == current_user.id,  # ดูเฉพาะออเดอร์ที่ assigned ให้พนักงานนี้
+        Order.created_at >= f"{date} 00:00:00",
+        Order.created_at <= f"{date} 23:59:59"
+    )).all()
+
+    order_data = [
+        {
+            "order_id": order.order_id,
+            "table_number": order.camera.table_number if order.camera else "N/A",
+            "status": order.status,
+            "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        for order in orders
+    ]
+    return {"my_work_status": order_data}
+
+
+
+# Route สำหรับแสดงหน้าประวัติการทำงาน
+@router.get("/my-work-history", response_class=HTMLResponse)
+def get_my_work_history(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    ✅ แสดงหน้าประวัติการทำงานของพนักงาน
+    """
+    return templates.TemplateResponse("my_work_history.html", {"request": request, "current_user": current_user})
+
+
+
+
+
