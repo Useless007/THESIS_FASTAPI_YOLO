@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <title>จัดการกล้อง</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+</head>
+
+<body class="bg-gray-100">
+    <div class="min-h-screen bg-gray-100">
+        <header class="bg-white shadow">
+            <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center">
+                    <h1 class="text-3xl font-bold tracking-tight text-gray-900">จัดการกล้อง</h1>
+                    <button onclick="openAddModal()"
+                        class="rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                        เพิ่มกล้องใหม่
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="mx-auto max-w-7xl py-6 sm:px-6 lg:px-8">
+                <div class="px-4 py-6 sm:px-0">
+                    <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+                        <table class="min-w-full divide-y divide-gray-300">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col"
+                                        class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
+                                        หมายเลขโต๊ะ</th>
+                                    <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                        ชื่อกล้อง</th>
+                                    <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                        URL สตรีม</th>
+                                    <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                                        พนักงานที่ใช้งาน</th>
+                                    <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6">
+                                        <span class="sr-only">Actions</span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200 bg-white">
+                                {% for camera in cameras %}
+                                <tr>
+                                    <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                                        {{ camera.table_number }}</td>
+                                    <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ camera.name }}</td>
+                                    <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ camera.stream_url }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                                        {{ camera.user.name if camera.user else '-' }}</td>
+                                    <td
+                                        class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                                        <button onclick="openEditModal({{ camera.id }}, {{ camera.table_number }}, '{{ camera.name }}', '{{ camera.stream_url }}', {{ camera.assigned_to if camera.assigned_to else 'null' }})"
+                                            class="text-indigo-600 hover:text-indigo-900 mr-4">แก้ไข</button>
+                                        <button onclick="deleteCamera({{ camera.id }})"
+                                            class="text-red-600 hover:text-red-900">ลบ</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal สำหรับเพิ่ม/แก้ไขกล้อง -->
+    <div id="cameraModal"
+        class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full flex items-center justify-center">
+        <div class="relative p-8 bg-white w-full max-w-md mx-auto rounded-md shadow-lg">
+            <h2 id="modalTitle" class="text-2xl font-bold mb-4">เพิ่มกล้องใหม่</h2>
+            <form id="cameraForm" onsubmit="handleSubmit(event)">
+                <input type="hidden" id="cameraId">
+                <div class="space-y-4">
+                    <div>
+                        <label for="tableNumber" class="block text-sm font-medium text-gray-700">หมายเลขโต๊ะ</label>
+                        <input type="number" id="tableNumber" name="tableNumber" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700">ชื่อกล้อง</label>
+                        <input type="text" id="name" name="name" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="streamUrl" class="block text-sm font-medium text-gray-700">URL สตรีม</label>
+                        <input type="text" id="streamUrl" name="streamUrl" required
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="assignedTo" class="block text-sm font-medium text-gray-700">พนักงานที่ใช้งาน</label>
+                        <select id="assignedTo" name="assignedTo"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                            <option value="">-- เลือกพนักงาน --</option>
+                            {% for employee in employees %}
+                            <option value="{{ employee.id }}">{{ employee.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button type="button" onclick="closeModal()"
+                        class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                        ยกเลิก
+                    </button>
+                    <button type="submit"
+                        class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
+                        บันทึก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let isEditing = false;
+
+        function openAddModal() {
+            isEditing = false;
+            document.getElementById('modalTitle').textContent = 'เพิ่มกล้องใหม่';
+            document.getElementById('cameraForm').reset();
+            document.getElementById('cameraId').value = '';
+            document.getElementById('cameraModal').classList.remove('hidden');
+        }
+
+        function openEditModal(id, tableNumber, name, streamUrl, assignedTo) {
+            isEditing = true;
+            document.getElementById('modalTitle').textContent = 'แก้ไขกล้อง';
+            document.getElementById('cameraId').value = id;
+            document.getElementById('tableNumber').value = tableNumber;
+            document.getElementById('name').value = name;
+            document.getElementById('streamUrl').value = streamUrl;
+            document.getElementById('assignedTo').value = assignedTo || '';
+            document.getElementById('cameraModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('cameraModal').classList.add('hidden');
+            document.getElementById('cameraForm').reset();
+        }
+
+        async function handleSubmit(event) {
+            event.preventDefault();
+            const formData = {
+                table_number: parseInt(document.getElementById('tableNumber').value),
+                name: document.getElementById('name').value,
+                stream_url: document.getElementById('streamUrl').value,
+                assigned_to: document.getElementById('assignedTo').value || null
+            };
+
+            try {
+                const url = isEditing
+                    ? `/admin/api/cameras/${document.getElementById('cameraId').value}`
+                    : '/admin/api/cameras';
+                const method = isEditing ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: isEditing ? 'แก้ไขกล้องเรียบร้อย' : 'เพิ่มกล้องเรียบร้อย',
+                        showConfirmButton: false,
+                        timer: 1500
+                    }).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    const data = await response.json();
+                    throw new Error(data.detail);
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'เกิดข้อผิดพลาด',
+                    text: error.message
+                });
+            }
+        }
+
+        async function deleteCamera(id) {
+            const result = await Swal.fire({
+                title: 'ยืนยันการลบ',
+                text: "คุณต้องการลบกล้องนี้ใช่หรือไม่?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#EF4444',
+                cancelButtonColor: '#6B7280',
+                confirmButtonText: 'ลบ',
+                cancelButtonText: 'ยกเลิก'
+            });
+
+            if (result.isConfirmed) {
+                try {
+                    const response = await fetch(`/admin/api/cameras/${id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+                        }
+                    });
+
+                    if (response.ok) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'ลบกล้องเรียบร้อย',
+                            showConfirmButton: false,
+                            timer: 1500
+                        }).then(() => {
+                            window.location.reload();
+                        });
+                    } else {
+                        const data = await response.json();
+                        throw new Error(data.detail);
+                    }
+                } catch (error) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'เกิดข้อผิดพลาด',
+                        text: error.message
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -13,6 +13,7 @@ import os
 from app.database import get_db
 from app.services.auth import get_current_user
 from app.models.order import Order
+from app.models.user import User
 from app.schemas.user import UserOut
 
 # เพิ่ม Jinja2 Templates
@@ -61,6 +62,11 @@ def get_cart_page(
 async def checkout(
     cart: str = Form(...),  # รับ cart เป็น JSON string จาก FormData
     payment_slip: UploadFile = File(...),
+    fullname: str = Form(...),
+    phone: str = Form(...),
+    address: str = Form(...),
+    province: str = Form(...),
+    postal_code: str = Form(...),
     db: Session = Depends(get_db),
     current_user: Optional[UserOut] = Depends(get_current_user)
 ):
@@ -84,6 +90,16 @@ async def checkout(
 
     if payment_slip.size > 15 * 1024 * 1024:  # 15MB
         raise HTTPException(status_code=400, detail="❌ ขนาดไฟล์ต้องไม่เกิน 15MB")
+
+    # อัพเดทที่อยู่ของผู้ใช้
+    user = db.query(User).filter(User.email == current_user.email).first()
+    if user:
+        # สร้างที่อยู่แบบเต็ม
+        full_address = f"{address}, {province} {postal_code}"
+        user.name = fullname
+        user.phone = phone
+        user.address = full_address
+        db.commit()
 
     # บันทึกไฟล์สลิปการโอนเงิน
     slip_filename = f"{current_user.email}_{payment_slip.filename}"
@@ -151,4 +167,3 @@ def get_my_orders_page(
         "my_orders.html",
         {"request": request, "current_user": current_user}
     )
-

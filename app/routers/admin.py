@@ -10,10 +10,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date, and_, or_
 from app.models.user import User
 from app.models.order import Order
-from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
+from app.models.camera import Camera
+from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user, get_user_with_role
 from app.services.ws_manager import admin_connections
 from app.database import get_db
 from fastapi.templating import Jinja2Templates
+from app.crud import camera as camera_crud
+from app.schemas.camera import CameraCreate, CameraUpdate, Camera as CameraSchema
+from app.crud import user as user_crud
 
 admin_connections: List[WebSocket] = []
 templates = Jinja2Templates(directory="app/templates")
@@ -409,24 +413,67 @@ def get_my_work_status(
     """
     ✅ ให้พนักงานดูสถานะของตนเองในแต่ละวัน
     """
-    orders = db.query(Order).filter(and_(
-        Order.assigned_to == current_user.id,  # ดูเฉพาะออเดอร์ที่ assigned ให้พนักงานนี้
-        Order.created_at >= f"{date} 00:00:00",
-        Order.created_at <= f"{date} 23:59:59"
-    )).all()
+    try:
+        # แปลงวันที่เป็น datetime object เพื่อให้การค้นหาแม่นยำขึ้น
+        date_obj = datetime.strptime(date, "%Y-%m-%d")
+        start_date = date_obj.replace(hour=0, minute=0, second=0)
+        end_date = date_obj.replace(hour=23, minute=59, second=59)
 
-    order_data = [
-        {
-            "order_id": order.order_id,
-            "table_number": order.camera.table_number if order.camera else "N/A",
-            "status": order.status,
-            "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        # ดึงข้อมูลกล้องที่ถูก assign ให้พนักงานนี้
+        assigned_camera = db.query(Camera).filter(Camera.assigned_to == current_user.id).first()
+        table_number = assigned_camera.table_number if assigned_camera else "N/A"
+
+        # ดึงข้อมูล orders ของพนักงาน
+        orders = (
+            db.query(Order)
+            .filter(
+                Order.assigned_to == current_user.id,
+                Order.created_at >= start_date,
+                Order.created_at <= end_date
+            )
+            .order_by(Order.created_at.desc())
+            .all()
+        )
+
+        order_data = []
+        for order in orders:
+            # แปลงข้อมูล JSON string เป็น dict
+            try:
+                items = json.loads(order.item) if order.item else {}
+                item_count = len(items)
+            except json.JSONDecodeError:
+                items = {}
+                item_count = 0
+
+            order_data.append({
+                "order_id": order.order_id,
+                "table_number": table_number,  # ใช้หมายเลขโต๊ะจากกล้องที่ถูก assign
+                "status": order.status,
+                "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "total": float(order.total),
+                "item_count": item_count,
+                "is_verified": order.is_verified
+            })
+
+        # คำนวณสถิติ
+        completed_orders = sum(1 for order in order_data if order["status"] == "completed")
+        total_sales = sum(order["total"] for order in order_data if order["status"] == "completed")
+
+        return {
+            "my_work_status": order_data,
+            "statistics": {
+                "total_orders": len(order_data),
+                "completed_orders": completed_orders,
+                "completion_rate": f"{(completed_orders/len(order_data)*100):.1f}%" if order_data else "0%",
+                "total_sales": total_sales
+            },
+            "date": date
         }
-        for order in orders
-    ]
-    return {"my_work_status": order_data}
 
-
+    except ValueError:
+        raise HTTPException(status_code=400, detail="รูปแบบวันที่ไม่ถูกต้อง กรุณาใช้รูปแบบ YYYY-MM-DD")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"เกิดข้อผิดพลาด: {str(e)}")
 
 # Route สำหรับแสดงหน้าประวัติการทำงาน
 @router.get("/my-work-history", response_class=HTMLResponse)
@@ -441,5 +488,66 @@ def get_my_work_history(
 
 
 
+# Camera Management Routes
+@router.get("/cameras", response_class=HTMLResponse)
+async def get_cameras_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    """หน้าจัดการกล้อง"""
+    cameras = camera_crud.get_cameras(db)
+    employees = user_crud.get_users_by_role(db, "employee")  # ดึงรายชื่อพนักงานทั้งหมด
+    return templates.TemplateResponse(
+        "cameras.html",
+        {
+            "request": request,
+            "cameras": cameras,
+            "employees": employees
+        }
+    )
 
+# Camera API Endpoints
+@router.get("/api/cameras", response_model=List[CameraSchema])
+async def get_cameras(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    """ดึงข้อมูลกล้องทั้งหมด"""
+    return camera_crud.get_cameras(db)
 
+@router.post("/api/cameras", response_model=CameraSchema)
+async def create_camera(
+    camera: CameraCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    """สร้างกล้องใหม่"""
+    db_camera = camera_crud.create_camera(db, camera)
+    if not db_camera:
+        raise HTTPException(status_code=400, detail="หมายเลขโต๊ะนี้มีกล้องใช้งานอยู่แล้ว")
+    return db_camera
+
+@router.put("/api/cameras/{camera_id}", response_model=CameraSchema)
+async def update_camera(
+    camera_id: int,
+    camera: CameraUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    """อัปเดตข้อมูลกล้อง"""
+    db_camera = camera_crud.update_camera(db, camera_id, camera)
+    if not db_camera:
+        raise HTTPException(status_code=404, detail="ไม่พบกล้องที่ต้องการหรือหมายเลขโต๊ะซ้ำ")
+    return db_camera
+
+@router.delete("/api/cameras/{camera_id}")
+async def delete_camera(
+    camera_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+):
+    """ลบกล้อง"""
+    if not camera_crud.delete_camera(db, camera_id):
+        raise HTTPException(status_code=404, detail="ไม่พบกล้องที่ต้องการ")
+    return {"status": "success", "message": "ลบกล้องเรียบร้อยแล้ว"}

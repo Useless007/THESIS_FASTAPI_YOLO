@@ -1,225 +1,273 @@
 <!-- app/templates/cart.html -->
-
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cart</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
-    <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cart</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+  <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
 
-    <script> // tailwind.config
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: { "50": "#eff6ff", "100": "#dbeafe", "200": "#bfdbfe", "300": "#93c5fd", "400": "#60a5fa", "500": "#3b82f6", "600": "#2563eb", "700": "#1d4ed8", "800": "#1e40af", "900": "#1e3a8a", "950": "#172554" }
-                    }
-                },
-                fontFamily: {
-                    'body': [
-                        'Inter',
-                        'ui-sans-serif',
-                        'system-ui',
-                        '-apple-system',
-                        'system-ui',
-                        'Segoe UI',
-                        'Roboto',
-                        'Helvetica Neue',
-                        'Arial',
-                        'Noto Sans',
-                        'sans-serif',
-                        'Apple Color Emoji',
-                        'Segoe UI Emoji',
-                        'Segoe UI Symbol',
-                        'Noto Color Emoji'
-                    ],
-                    'sans': [
-                        'Inter',
-                        'ui-sans-serif',
-                        'system-ui',
-                        '-apple-system',
-                        'system-ui',
-                        'Segoe UI',
-                        'Roboto',
-                        'Helvetica Neue',
-                        'Arial',
-                        'Noto Sans',
-                        'sans-serif',
-                        'Apple Color Emoji',
-                        'Segoe UI Emoji',
-                        'Segoe UI Symbol',
-                        'Noto Color Emoji'
-                    ]
-                }
+  <script>
+    // tailwind.config
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              "50": "#eff6ff",
+              "100": "#dbeafe",
+              "200": "#bfdbfe",
+              "300": "#93c5fd",
+              "400": "#60a5fa",
+              "500": "#3b82f6",
+              "600": "#2563eb",
+              "700": "#1d4ed8",
+              "800": "#1e40af",
+              "900": "#1e3a8a",
+              "950": "#172554"
             }
+          }
+        },
+        fontFamily: {
+          'body': [
+            'Inter',
+            'ui-sans-serif',
+            'system-ui',
+            '-apple-system',
+            'system-ui',
+            'Segoe UI',
+            'Roboto',
+            'Helvetica Neue',
+            'Arial',
+            'Noto Sans',
+            'sans-serif',
+            'Apple Color Emoji',
+            'Segoe UI Emoji',
+            'Segoe UI Symbol',
+            'Noto Color Emoji'
+          ],
+          'sans': [
+            'Inter',
+            'ui-sans-serif',
+            'system-ui',
+            '-apple-system',
+            'system-ui',
+            'Segoe UI',
+            'Roboto',
+            'Helvetica Neue',
+            'Arial',
+            'Noto Sans',
+            'sans-serif',
+            'Apple Color Emoji',
+            'Segoe UI Emoji',
+            'Segoe UI Symbol',
+            'Noto Color Emoji'
+          ]
         }
-    </script>
-
+      }
+    }
+  </script>
 </head>
 
 <body class="bg-gray-100 font-sans leading-normal tracking-normal">
+  <!-- Navbar -->
+  <nav class="bg-white border-gray-200 px-4 py-2.5 rounded-lg shadow-md">
+    <div class="flex flex-wrap justify-between items-center">
+      <a href="/" class="flex items-center">
+        <span class="self-center text-xl font-semibold whitespace-nowrap">🛍️ MyCart</span>
+      </a>
+      <div>
+        <a href="/" class="text-gray-600 hover:text-gray-900 mr-4">หน้าแรก</a>
+        <a href="/logout" class="text-gray-600 hover:text-gray-900">ออกจากระบบ</a>
+      </div>
+    </div>
+  </nav>
 
-    <!-- Navbar -->
-    <nav class="bg-white border-gray-200 px-4 py-2.5 rounded-lg shadow-md">
-        <div class="flex flex-wrap justify-between items-center">
-            <a href="/" class="flex items-center">
-                <span class="self-center text-xl font-semibold whitespace-nowrap">🛍️ MyCart</span>
-            </a>
-            <div>
-                <a href="/" class="text-gray-600 hover:text-gray-900 mr-4">หน้าแรก</a>
-                <a href="/logout" class="text-gray-600 hover:text-gray-900">ออกจากระบบ</a>
-            </div>
-        </div>
-    </nav>
+  <!-- Cart Container -->
+  <div class="container mx-auto mt-8 p-4 bg-white rounded-lg shadow-md">
+    <h1 class="text-2xl font-semibold mb-4">🛒 ตะกร้าสินค้า</h1>
+    <div id="cart-container" class="divide-y divide-gray-200"></div>
 
-    <!-- Cart Container -->
-    <div class="container mx-auto mt-8 p-4 bg-white rounded-lg shadow-md">
-        <h1 class="text-2xl font-semibold mb-4">🛒 ตะกร้าสินค้า</h1>
-        <div id="cart-container" class="divide-y divide-gray-200"></div>
-
-        <div class="mt-6 flex justify-between items-center">
-            <h3 id="cart-total" class="text-xl font-bold">ราคารวม: ฿0</h3>
-            <div class="flex gap-2">
-                <button onclick="clearCart()"
-                    class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">ล้างตะกร้า</button>
-                <button onclick="checkout()"
-                    class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">ชำระเงิน</button>
-            </div>
-        </div>
-
-        <!-- อัปโหลดสลิปการโอนเงิน -->
-        <div class="mt-8">
-            <h2 class="text-xl font-semibold mb-4">📎 แนบสลิปการโอนเงิน</h2>
-            <input type="file" id="payment-slip" accept="image/png, image/jpeg"
-                class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none" />
-            <p class="mt-2 text-sm text-gray-500">ไฟล์ต้องเป็นรูปภาพ (JPG, PNG) และมีขนาดไม่เกิน 15MB</p>
-        </div>
-
+    <div class="mt-6 flex justify-between items-center">
+      <h3 id="cart-total" class="text-xl font-bold">ราคารวม: ฿0</h3>
+      <div class="flex gap-2">
+        <!-- ปุ่มล้างตะกร้า -->
+        <button onclick="clearCart()" class="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
+          ล้างตะกร้า
+        </button>
+        <!-- ปุ่มชำระเงิน -->
+        <button onclick="checkout()" class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
+          ชำระเงิน
+        </button>
+      </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="mt-8 p-4 bg-white text-center text-gray-600">
-        &copy; 2024 MyCart. All rights reserved.
-    </footer>
+    <!-- ฟอร์มที่อยู่จัดส่ง -->
+    <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+      <h2 class="text-xl font-semibold mb-4">ที่อยู่จัดส่ง</h2>
+      <div class="grid gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ-นามสกุล</label>
+          <input type="text" id="fullname" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">เบอร์โทรศัพท์</label>
+          <input type="tel" id="phone" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">ที่อยู่</label>
+          <textarea id="address" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">จังหวัด</label>
+          <input type="text" id="province" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">รหัสไปรษณีย์</label>
+          <input type="text" id="postal_code" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+        </div>
+      </div>
+    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
-    <script>
-        // แสดงตะกร้าสินค้า
-        function displayCart() {
-            let cart = JSON.parse(localStorage.getItem('cart')) || { cart: [], cart_total: 0 };
-            let cartContainer = document.getElementById('cart-container');
-            let cartTotal = document.getElementById('cart-total');
+    <!-- อัปโหลดสลิปการโอนเงิน -->
+    <div class="mt-8">
+      <h2 class="text-xl font-semibold mb-4">📎 แนบสลิปการโอนเงิน</h2>
+      <input type="file" id="payment-slip" accept="image/png, image/jpeg" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
+      <p class="mt-2 text-sm text-gray-500">ไฟล์ต้องเป็นรูปภาพ (JPG, PNG) และมีขนาดไม่เกิน 15MB</p>
+    </div>
+  </div>
 
-            cartContainer.innerHTML = ''; // เคลียร์ตะกร้าก่อนแสดงผลใหม่
+  <!-- Footer -->
+  <footer class="mt-8 p-4 bg-white text-center text-gray-600">
+    &copy; 2024 MyCart. All rights reserved.
+  </footer>
 
-            if (cart.cart.length === 0) {
-                cartContainer.innerHTML = `
-                    <div class="text-center py-4">
-                        <p class="text-gray-500">🛒 ตะกร้าสินค้าว่างเปล่า</p>
-                    </div>
-                `;
-                cartTotal.textContent = "ราคารวม: ฿0";
-                return;
-            }
+  <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
+  <script>
+    // แสดงตะกร้าสินค้า
+    function displayCart() {
+      let cart = JSON.parse(localStorage.getItem('cart')) || { cart: [], cart_total: 0 };
+      let cartContainer = document.getElementById('cart-container');
+      let cartTotal = document.getElementById('cart-total');
 
-            cart.cart.forEach(item => {
-                cartContainer.innerHTML += `
-                    <div class="flex items-center justify-between py-4">
-                        <div>
-                            <h3 class="text-lg font-medium">${item.name}</h3>
-                            <p class="text-gray-500">฿${item.price} x ${item.quantity}</p>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <p class="text-lg font-semibold">฿${item.total}</p>
-                            <button onclick="removeFromCart(${item.product_id})" class="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">ลบ</button>
-                        </div>
-                    </div>
-                `;
-            });
+      cartContainer.innerHTML = ''; // เคลียร์ข้อมูลเก่า
 
-            cartTotal.textContent = `ราคารวม: ฿${cart.cart_total}`;
-        }
+      if (cart.cart.length === 0) {
+        cartContainer.innerHTML = `
+          <div class="text-center py-4">
+            <p class="text-gray-500">🛒 ตะกร้าสินค้าว่างเปล่า</p>
+          </div>
+        `;
+        cartTotal.textContent = "ราคารวม: ฿0";
+        return;
+      }
 
-        // ลบสินค้าออกจากตะกร้า
-        function removeFromCart(productId) {
-            let cart = JSON.parse(localStorage.getItem('cart')) || { cart: [], cart_total: 0 };
-            cart.cart = cart.cart.filter(item => item.product_id !== productId);
+      cart.cart.forEach(item => {
+        cartContainer.innerHTML += `
+          <div class="flex items-center justify-between py-4">
+            <div>
+              <h3 class="text-lg font-medium">${item.name}</h3>
+              <p class="text-gray-500">฿${item.price} x ${item.quantity}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <p class="text-lg font-semibold">฿${item.total}</p>
+              <!-- ปุ่มลบสินค้า (ใช้ gradient แบบ modern) -->
+              <button onclick="removeFromCart(${item.product_id})" class="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold px-3 py-1 rounded-lg shadow-md transition-all duration-300">
+                ลบ
+              </button>
+            </div>
+          </div>
+        `;
+      });
 
-            cart.cart_total = cart.cart.reduce((sum, item) => sum + item.total, 0);
+      cartTotal.textContent = `ราคารวม: ฿${cart.cart_total}`;
+    }
 
-            localStorage.setItem('cart', JSON.stringify(cart));
-            displayCart();
-        }
+    // ลบสินค้าออกจากตะกร้า
+    function removeFromCart(productId) {
+      let cart = JSON.parse(localStorage.getItem('cart')) || { cart: [], cart_total: 0 };
+      cart.cart = cart.cart.filter(item => item.product_id !== productId);
+      cart.cart_total = cart.cart.reduce((sum, item) => sum + item.total, 0);
+      localStorage.setItem('cart', JSON.stringify(cart));
+      displayCart();
+    }
 
-        // ล้างตะกร้า
-        function clearCart() {
-            localStorage.removeItem('cart');
-            displayCart();
-        }
+    // ล้างตะกร้า
+    function clearCart() {
+      localStorage.removeItem('cart');
+      displayCart();
+    }
 
-        // ฟังก์ชันชำระเงิน
-        function checkout() {
-            let cart = JSON.parse(localStorage.getItem('cart')) || { cart: [], cart_total: 0 };
-            let paymentSlip = document.getElementById('payment-slip').files[0];
+    // ฟังก์ชันชำระเงิน
+    function checkout() {
+      let cart = JSON.parse(localStorage.getItem('cart')) || { cart: [], cart_total: 0 };
+      let paymentSlip = document.getElementById('payment-slip').files[0];
 
-            if (!paymentSlip) {
-                alert('❌ กรุณาแนบสลิปการโอนเงิน');
-                return;
-            }
+      if (!paymentSlip) {
+        alert('❌ กรุณาแนบสลิปการโอนเงิน');
+        return;
+      }
 
-            if (paymentSlip.size > 15 * 1024 * 1024) {
-                alert('❌ ขนาดไฟล์เกิน 15MB');
-                return;
-            }
+      if (paymentSlip.size > 15 * 1024 * 1024) {
+        alert('❌ ขนาดไฟล์เกิน 15MB');
+        return;
+      }
 
-            const formData = new FormData();
-            formData.append('cart', JSON.stringify(cart)); // ส่งตะกร้าเป็น JSON string
-            formData.append('payment_slip', paymentSlip);
+      const formData = new FormData();
+      // ส่งตะกร้าเป็น JSON string (logic เดิม)
+      formData.append('cart', JSON.stringify(cart));
+      formData.append('payment_slip', paymentSlip);
+      formData.append('items', JSON.stringify(cart.cart));
+      formData.append('total', cart.cart_total);
+      // เพิ่มข้อมูลที่อยู่
+      formData.append('fullname', document.getElementById('fullname').value);
+      formData.append('phone', document.getElementById('phone').value);
+      formData.append('address', document.getElementById('address').value);
+      formData.append('province', document.getElementById('province').value);
+      formData.append('postal_code', document.getElementById('postal_code').value);
 
-            // ดึง Token จาก Cookie
-            const cookies = document.cookie.split('; ').reduce((acc, cookie) => {
-                const [name, value] = cookie.split('=');
-                acc[name] = value;
-                return acc;
-            }, {});
+      // ดึง Token จาก Cookie
+      const cookies = document.cookie.split('; ').reduce((acc, cookie) => {
+        const [name, value] = cookie.split('=');
+        acc[name] = value;
+        return acc;
+      }, {});
 
-            const token = cookies['Authorization'] ? cookies['Authorization'].replace('Bearer ', '') : null;
+      const token = cookies['Authorization'] ? cookies['Authorization'].replace('Bearer ', '') : null;
 
-            fetch('/checkout', {
-                method: 'POST',
-                headers: {
-                    'Authorization': token ? `Bearer ${token}` : ''
-                },
-                body: formData
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('❌ ชำระเงินไม่สำเร็จ');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('✅ Checkout Success:', data);
-                    alert(`✅ ชำระเงินสำเร็จ!\nอีเมลผู้สั่งซื้อ: ${data.user_email}\nราคารวม: ฿${data.cart_total}`);
-                    localStorage.removeItem('cart');
-                    displayCart();
-                    window.location.href = '/'; // ไปยังหน้าแรกหลังจากชำระเงินสำเร็จ
-                })
-                .catch(error => {
-                    console.error('❌ Checkout Error:', error);
-                    alert('❌ ชำระเงินไม่สำเร็จ');
-                });
-        }
+      fetch('/checkout', {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: formData
+      })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('❌ ชำระเงินไม่สำเร็จ');
+          }
+          return response.json();
+        })
+        .then(data => {
+          console.log('✅ Checkout Success:', data);
+          alert(`✅ ชำระเงินสำเร็จ!\nอีเมลผู้สั่งซื้อ: ${data.user_email}\nราคารวม: ฿${data.cart_total}`);
+          localStorage.removeItem('cart');
+          displayCart();
+          window.location.href = '/'; // ไปยังหน้าแรกหลังจากชำระเงินสำเร็จ
+        })
+        .catch(error => {
+          console.error('❌ Checkout Error:', error);
+          alert('❌ ชำระเงินไม่สำเร็จ');
+        });
+    }
 
-
-        displayCart();
-    </script>
-
+    // แสดงตะกร้าเมื่อโหลดหน้า
+    displayCart();
+  </script>
 </body>
 
 </html>

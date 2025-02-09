@@ -54,7 +54,7 @@ class ExceptionLoggingMiddleware(BaseHTTPMiddleware):
             raise http_exc
         except Exception as exc:
             logger.error(f"🔥 Unhandled Exception: {request.client.host} | {request.method} {request.url} | {str(exc)}")
-            raise HTTPException(status_code=401, detail="Unauthorized: Please log in first")
+            raise HTTPException(status_code=500, detail=str(exc))
 
 class AuthRedirectMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):

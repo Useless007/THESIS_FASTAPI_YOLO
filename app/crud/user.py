@@ -79,3 +79,7 @@ def update_user_status(db: Session, user_id: int, is_active: bool):
     db.commit()
     db.refresh(db_user)
     return db_user
+
+# ดึงข้อมูลผู้ใช้ตามบทบาท
+def get_users_by_role(db: Session, role: str):
+    return db.query(User).filter(User.role == role, User.is_active == True).all()

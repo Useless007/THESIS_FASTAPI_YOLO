@@ -1,17 +1,16 @@
 # app/schemas/user.py
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
 from typing import Optional
 from datetime import datetime
 
 # Schema สำหรับการสร้าง User
 class UserCreate(BaseModel):
-    # username: str
     email: str
     password: str
     name: str
-    role: str
-    address: Optional[str] = None
+    role: str = Field(default="customer")
+    address: Optional[str] = Field(None, min_length=10, max_length=500)
     position: Optional[str] = None
     phone: Optional[str] = None
 
@@ -35,7 +34,6 @@ class UserUpdate(BaseModel):
 # Schema สำหรับการแสดงข้อมูล User
 class UserOut(BaseModel):
     id: int
-    # username: str
     email: str
     name: str
     role: str
@@ -45,6 +43,12 @@ class UserOut(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     is_active: bool
+
+    class Config:
+        orm_mode = True
+
+    class Config:
+        orm_mode = True
 
     class Config:
         orm_mode = True
