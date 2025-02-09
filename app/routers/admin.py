@@ -1,11 +1,11 @@
 # app/routers/admin.py
 
 import json
-from fastapi import APIRouter, Depends, Request, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
 from typing import List
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from app.services.ws_manager import NotifyPayload, notify_admin
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date, and_, or_
 from app.models.user import User
@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 from app.crud import camera as camera_crud
 from app.schemas.camera import CameraCreate, CameraUpdate, Camera as CameraSchema
 from app.crud import user as user_crud
+from app.crud import dashboard_crud
 
 admin_connections: List[WebSocket] = []
 templates = Jinja2Templates(directory="app/templates")
@@ -46,6 +47,9 @@ def dashboard_redirect(
     elif current_user.role == "employee" and current_user.position == "preparation staff":    
         print(f"🛡️ Preparation Dashboard Access by: {current_user.email}")
         return templates.TemplateResponse("preparation_dashboard.html", {"request": request, "current_user": current_user})
+    elif current_user.role == "employee" and current_user.position == "executive":
+        print(f"🛡️ Executive Dashboard Access by: {current_user.email}")
+        return templates.TemplateResponse("executive_dashboard.html", {"request": request, "current_user": current_user})
     else:
         raise HTTPException(status_code=403, detail="❌ Access Denied: Role or Position Invalid")
 
@@ -105,14 +109,7 @@ def get_all_users(
     users = db.query(User).all()
     user_data = [{"id": user.id, "name": user.name, "role": user.role, "position": user.position} for user in users]
     return user_data
-
-    """
-    ✅ ดึงข้อมูลผู้ใช้ทั้งหมดสำหรับจัดการบทบาท
-    """
-    users = db.query(User).all()
-    user_data = [{"id": user.id, "name": user.name, "role": user.role} for user in users]
-    return user_data
-
+    
 @router.put("/users/{user_id}/update-role", response_class=JSONResponse)
 def update_user_role(
     user_id: int,
@@ -370,7 +367,8 @@ def get_customers_to_activate(
     customer_data = [
         {
             "id": customer.id,
-            "name": customer.name,
+            # เปลี่ยนจาก customer.name เป็น customer.email
+            "name": customer.email,
             "email": customer.email,
             "role": customer.role
         }
@@ -396,7 +394,8 @@ def get_work_status(
         {
             "order_id": order.order_id,
             "table_number": order.camera.table_number if order.camera else "N/A",
-            "employee_name": order.user.name if order.user else "N/A",
+            # เปลี่ยนจาก order.user.name เป็น order.user.email
+            "employee_name": order.user.email if order.user else "N/A",
             "status": order.status,  # เช่น pending, packing, completed
             "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S")
         }
@@ -486,6 +485,27 @@ def get_my_work_history(
     """
     return templates.TemplateResponse("my_work_history.html", {"request": request, "current_user": current_user})
 
+# หน้า Executive Dashboard
+@router.get("/executive", response_class=HTMLResponse)
+async def get_executive_dashboard(
+    request: Request,
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "executive"))
+):
+    return templates.TemplateResponse(
+        "executive_dashboard.html",
+        {"request": request, "current_user": current_user}
+    )
+
+
+
+# API สำหรับดึงข้อมูล Dashboard
+@router.get("/api/executive/dashboard-data")
+async def get_executive_dashboard_data(
+    period: str = Query('today', enum=['today', 'week', 'month', 'year']),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "executive"))
+):
+    return dashboard_crud.get_executive_dashboard_data(db, period)
 
 
 # Camera Management Routes

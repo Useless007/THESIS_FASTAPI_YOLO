@@ -2,10 +2,11 @@ import pymysql
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from app.database import Base, engine
+from app.database import Base, engine, SessionLocal
 from app.models.user import User
 from app.models.order import Order
 from app.models.camera import Camera
+from app.services.auth import get_password_hash
 
 # ✅ โหลดค่าตัวแปรจาก .env
 load_dotenv()
@@ -30,4 +31,26 @@ engine = create_engine(DATABASE_URL)
 # ✅ สร้างตารางทั้งหมดใน database
 Base.metadata.create_all(bind=engine)
 
-print(f"✅ Database `{DB_NAME}` and Tables created successfully!")
+def init_db():
+    db = SessionLocal()
+    
+    # เช็คว่ามี executive account อยู่แล้วหรือไม่
+    executive = db.query(User).filter(User.email == "executive@example.com").first()
+    if not executive:
+        # สร้าง executive account
+        executive_user = User(
+            email="executive@example.com",
+            password=get_password_hash("executive1234"),
+            role="employee",
+            name="Executive",
+            position="executive",
+            is_active=True
+        )
+        db.add(executive_user)
+        db.commit()
+    
+    db.close()
+
+if __name__ == "__main__":
+    init_db()
+    print(f"✅ Database `{DB_NAME}` and Tables created successfully!")

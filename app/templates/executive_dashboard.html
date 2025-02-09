@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Executive Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/flowbite@2.2.1/dist/flowbite.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+</head>
+<body class="bg-gray-100">
+  <!-- Navbar -->
+  <nav class="bg-white shadow-lg">
+    <div class="max-w-7xl mx-auto px-4">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <span class="text-2xl font-bold">👔 Executive Dashboard</span>
+        </div>
+        <div class="flex items-center space-x-4">
+          <a href="/" class="text-gray-600 hover:text-gray-900">หน้าแรก</a>
+          <a href="/logout" class="text-gray-600 hover:text-gray-900">ออกจากระบบ</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="max-w-7xl mx-auto px-4 py-8">
+    <!-- Date Filter -->
+    <div class="mb-6 flex justify-between items-center">
+      <h2 class="text-2xl font-bold">สรุปภาพรวม</h2>
+      <select id="dateFilter" class="bg-white border rounded-lg px-4 py-2">
+        <option value="today">วันนี้</option>
+        <option value="week">7 วันที่ผ่านมา</option>
+        <option value="month">30 วันที่ผ่านมา</option>
+        <option value="year">ปีนี้</option>
+      </select>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <!-- ยอดขายรวม -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-sm text-gray-500">ยอดขายรวม</p>
+            <h3 id="totalSales" class="text-2xl font-bold">฿0</h3>
+          </div>
+          <span id="totalSalesChange" class="text-green-500 text-sm"></span>
+        </div>
+      </div>
+
+      <!-- จำนวนออเดอร์ -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-sm text-gray-500">จำนวนออเดอร์</p>
+            <h3 id="totalOrders" class="text-2xl font-bold">0</h3>
+          </div>
+          <span id="totalOrdersChange" class="text-green-500 text-sm"></span>
+        </div>
+      </div>
+
+      <!-- ลูกค้าใหม่ -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-sm text-gray-500">ลูกค้าใหม่</p>
+            <h3 id="newCustomers" class="text-2xl font-bold">0</h3>
+          </div>
+          <span id="newCustomersChange" class="text-green-500 text-sm"></span>
+        </div>
+      </div>
+
+      <!-- อัตราการเติบโต -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex justify-between items-start">
+          <div>
+            <p class="text-sm text-gray-500">อัตราการเติบโต</p>
+            <h3 id="growthRate" class="text-2xl font-bold">0%</h3>
+          </div>
+          <!-- หากต้องการเพิ่มเปอร์เซ็นต์เพิ่มเติมให้ปรับได้ที่นี่ -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <!-- ยอดขายรายวัน -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4">ยอดขายรายวัน</h3>
+        <canvas id="salesChart"></canvas>
+      </div>
+
+      <!-- สินค้าขายดี -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4">สินค้าขายดี</h3>
+        <canvas id="topProductsChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Tables -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- ออเดอร์ล่าสุด -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4">ออเดอร์ล่าสุด</h3>
+        <div class="overflow-x-auto">
+          <table class="min-w-full">
+            <thead>
+              <tr class="border-b">
+                <th class="text-left py-2">Order ID</th>
+                <th class="text-left py-2">ลูกค้า</th>
+                <th class="text-left py-2">ยอดรวม</th>
+                <th class="text-left py-2">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody id="recentOrders">
+              <!-- จะถูกเติมด้วย JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ประสิทธิภาพพนักงาน -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4">ประสิทธิภาพพนักงาน</h3>
+        <div class="overflow-x-auto">
+          <table class="min-w-full">
+            <thead>
+              <tr class="border-b">
+                <th class="text-left py-2">พนักงาน</th>
+                <th class="text-left py-2">ออเดอร์ที่จัดการ</th>
+                <th class="text-left py-2">เวลาเฉลี่ย</th>
+                <th class="text-left py-2">คะแนน</th>
+              </tr>
+            </thead>
+            <tbody id="staffPerformance">
+              <!-- จะถูกเติมด้วย JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ฟังก์ชันโหลดข้อมูล Dashboard
+    async function loadDashboardData(period = 'today') {
+      try {
+        const response = await fetch(`/admin/api/executive/dashboard-data?period=${period}`, {
+          headers: {
+            'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+          }
+        });
+        const data = await response.json();
+        updateDashboard(data);
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+      }
+    }
+
+    // อัพเดทข้อมูลบน Dashboard
+    function updateDashboard(data) {
+      // อัพเดทตัวเลขหลัก
+      document.getElementById('totalSales').textContent = `฿${data.total_sales.toLocaleString()}`;
+      document.getElementById('totalOrders').textContent = data.total_orders.toLocaleString();
+      document.getElementById('newCustomers').textContent = data.new_customers.toLocaleString();
+      document.getElementById('growthRate').textContent = `${data.growth_rate}%`;
+
+      // อัพเดทเปอร์เซ็นต์เปลี่ยนแปลงจริง
+      document.getElementById('totalSalesChange').textContent = `${data.sales_change >= 0 ? '+' : ''}${data.sales_change}%`;
+      document.getElementById('totalOrdersChange').textContent = `${data.orders_change >= 0 ? '+' : ''}${data.orders_change}%`;
+      document.getElementById('newCustomersChange').textContent = `${data.customers_change >= 0 ? '+' : ''}${data.customers_change}%`;
+
+      // สร้างกราฟยอดขาย
+      createSalesChart(data.daily_sales);
+      createTopProductsChart(data.top_products);
+
+      // อัพเดทตารางข้อมูล
+      updateRecentOrders(data.recent_orders);
+      updateStaffPerformance(data.staff_performance);
+    }
+
+    // สร้างกราฟยอดขาย
+    function createSalesChart(data) {
+      const ctx = document.getElementById('salesChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.map(d => d.date),
+          datasets: [{
+            label: 'ยอดขาย',
+            data: data.map(d => d.amount),
+            borderColor: 'rgb(59, 130, 246)',
+            tension: 0.1
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'top',
+            }
+          }
+        }
+      });
+    }
+
+    // สร้างกราฟสินค้าขายดี
+    function createTopProductsChart(data) {
+      const ctx = document.getElementById('topProductsChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.map(d => d.name),
+          datasets: [{
+            label: 'จำนวนที่ขายได้',
+            data: data.map(d => d.quantity),
+            backgroundColor: 'rgb(59, 130, 246)'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              position: 'top',
+            }
+          }
+        }
+      });
+    }
+
+    // อัพเดทตารางออเดอร์ล่าสุด
+    function updateRecentOrders(orders) {
+      const tbody = document.getElementById('recentOrders');
+      tbody.innerHTML = orders.map(order => `
+        <tr class="border-b">
+          <td class="py-2">${order.id}</td>
+          <td class="py-2">${order.customer}</td>
+          <td class="py-2">฿${order.total.toLocaleString()}</td>
+          <td class="py-2">
+            <span class="px-2 py-1 rounded-full text-xs ${getStatusColor(order.status)}">
+              ${order.status}
+            </span>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // อัพเดทตารางประสิทธิภาพพนักงาน
+    function updateStaffPerformance(staff) {
+      const tbody = document.getElementById('staffPerformance');
+      tbody.innerHTML = staff.map(s => `
+        <tr class="border-b">
+          <td class="py-2">${s.name}</td>
+          <td class="py-2">${s.orders_handled}</td>
+          <td class="py-2">${s.avg_time} นาที</td>
+          <td class="py-2">${s.rating}/5</td>
+        </tr>
+      `).join('');
+    }
+
+    // ฟังก์ชันช่วยจัดการสีสถานะ
+    function getStatusColor(status) {
+      const colors = {
+        'pending': 'bg-yellow-100 text-yellow-800',
+        'processing': 'bg-blue-100 text-blue-800',
+        'completed': 'bg-green-100 text-green-800',
+        'cancelled': 'bg-red-100 text-red-800'
+      };
+      return colors[status] || 'bg-gray-100 text-gray-800';
+    }
+
+    // Event Listener สำหรับ date filter
+    document.getElementById('dateFilter').addEventListener('change', (e) => {
+      loadDashboardData(e.target.value);
+    });
+
+    // โหลดข้อมูลครั้งแรก
+    loadDashboardData();
+
+    // อัพเดทข้อมูลทุก 5 นาที
+    setInterval(() => loadDashboardData(document.getElementById('dateFilter').value), 5 * 60 * 1000);
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/flowbite@2.2.1/dist/flowbite.min.js"></script>
+</body>
+</html>
