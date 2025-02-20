@@ -1,3 +1,5 @@
+# app/middleware.py
+
 from fastapi import Request,HTTPException
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -60,13 +62,10 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
 
-        # ตรวจจับ HTTP 401 Unauthorized
-        if response.status_code == 401:
-            print("🔄 Redirecting to /login due to unauthorized access.")
-            return RedirectResponse(url="/login")
-
         if response.status_code == 404:
-            print("🔄 Redirecting to 404 due to 404.")
-            return RedirectResponse(url="/page_not_found")
-
+            # ตรวจสอบว่าหน้าปัจจุบันไม่ใช่ /page_not_found ก่อนจะ redirect
+            if request.url.path != "/page_not_found":
+                print(f"🔄 Redirecting to /page_not_found due to 404: {request.url.path}")
+                return RedirectResponse(url="/page_not_found", status_code=302)
+        
         return response
