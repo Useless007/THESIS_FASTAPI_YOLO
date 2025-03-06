@@ -222,6 +222,18 @@ def check_user_role(
 # ---------------------------------------------------------------------
 # PUBLIC USER ENDPOINTS
 # ---------------------------------------------------------------------
+
+# ตัวอย่างคร่าว ๆ
+@router.get("/profile")
+def get_user_profile(current_user: User = Depends(get_current_user)):
+    return {
+        "name": current_user.name,
+        "phone": current_user.phone,
+        "address": current_user.address  # ใส่อะไรไปก็ส่งกลับมาแบบนั้น
+    }
+
+
+
 @router.post("/", response_model=UserOut)
 def create_new_user(user: UserCreate, db: Session = Depends(get_db)):
     """
@@ -256,6 +268,8 @@ def update_user_info(user_id: int, user: UserUpdate, db: Session = Depends(get_d
     if db_user:
         return db_user
     raise HTTPException(status_code=404, detail="User not found")
+
+
 
 # ---------------------------------------------------------------------
 # ADMIN ONLY ENDPOINTS

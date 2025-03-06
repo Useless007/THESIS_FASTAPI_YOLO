@@ -96,11 +96,13 @@
       <h3 id="cart-total" class="text-xl font-bold">ราคารวม: ฿0</h3>
       <div class="flex gap-2">
         <!-- ปุ่มล้างตะกร้า -->
-        <button onclick="clearCart()" class="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
+        <button onclick="clearCart()"
+          class="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
           ล้างตะกร้า
         </button>
         <!-- ปุ่มชำระเงิน -->
-        <button onclick="checkout()" class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
+        <button onclick="checkout()"
+          class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
           ชำระเงิน
         </button>
       </div>
@@ -110,25 +112,35 @@
     <div class="bg-white rounded-lg shadow-md p-6 mb-8">
       <h2 class="text-xl font-semibold mb-4">ที่อยู่จัดส่ง</h2>
       <div class="grid gap-4">
+        <!-- ไม่ซ่อน div แล้ว แค่ใส่ค่า ถ้าว่างก็ปล่อยว่างไว้ให้กรอก -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">ชื่อ-นามสกุล</label>
-          <input type="text" id="fullname" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <input type="text" id="fullname"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
+
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">เบอร์โทรศัพท์</label>
-          <input type="tel" id="phone" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <input type="tel" id="phone"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
+
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">ที่อยู่</label>
-          <textarea id="address" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+          <textarea id="address" rows="3"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
         </div>
+
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">จังหวัด</label>
-          <input type="text" id="province" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <label class="block text-sm font-medium text-gray-700 mb-2" id="province_lb">จังหวัด</label>
+          <input type="text" id="province"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
+
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">รหัสไปรษณีย์</label>
-          <input type="text" id="postal_code" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <label class="block text-sm font-medium text-gray-700 mb-2" id="postal_code_lb">รหัสไปรษณีย์</label>
+          <input type="text" id="postal_code"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
       </div>
     </div>
@@ -136,7 +148,8 @@
     <!-- อัปโหลดสลิปการโอนเงิน -->
     <div class="mt-8">
       <h2 class="text-xl font-semibold mb-4">📎 แนบสลิปการโอนเงิน</h2>
-      <input type="file" id="payment-slip" accept="image/png, image/jpeg" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
+      <input type="file" id="payment-slip" accept="image/png, image/jpeg"
+        class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
       <p class="mt-2 text-sm text-gray-500">ไฟล์ต้องเป็นรูปภาพ (JPG, PNG) และมีขนาดไม่เกิน 15MB</p>
     </div>
   </div>
@@ -175,7 +188,7 @@
             </div>
             <div class="flex items-center gap-2">
               <p class="text-lg font-semibold">฿${item.total}</p>
-              <!-- ปุ่มลบสินค้า (ใช้ gradient แบบ modern) -->
+              <!-- ปุ่มลบสินค้า -->
               <button onclick="removeFromCart(${item.product_id})" class="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-semibold px-3 py-1 rounded-lg shadow-md transition-all duration-300">
                 ลบ
               </button>
@@ -218,11 +231,12 @@
       }
 
       const formData = new FormData();
-      // ส่งตะกร้าเป็น JSON string (logic เดิม)
+      // ส่งตะกร้าเป็น JSON string
       formData.append('cart', JSON.stringify(cart));
       formData.append('payment_slip', paymentSlip);
       formData.append('items', JSON.stringify(cart.cart));
       formData.append('total', cart.cart_total);
+
       // เพิ่มข้อมูลที่อยู่
       formData.append('fullname', document.getElementById('fullname').value);
       formData.append('phone', document.getElementById('phone').value);
@@ -236,7 +250,6 @@
         acc[name] = value;
         return acc;
       }, {});
-
       const token = cookies['Authorization'] ? cookies['Authorization'].replace('Bearer ', '') : null;
 
       fetch('/checkout', {
@@ -257,7 +270,7 @@
           alert(`✅ ชำระเงินสำเร็จ!\nอีเมลผู้สั่งซื้อ: ${data.user_email}\nราคารวม: ฿${data.cart_total}`);
           localStorage.removeItem('cart');
           displayCart();
-          window.location.href = '/'; // ไปยังหน้าแรกหลังจากชำระเงินสำเร็จ
+          window.location.href = '/';
         })
         .catch(error => {
           console.error('❌ Checkout Error:', error);
@@ -265,8 +278,88 @@
         });
     }
 
-    // แสดงตะกร้าเมื่อโหลดหน้า
-    displayCart();
+    // ฟังก์ชันดึงข้อมูล user จากฐานข้อมูล (สมมติ endpoint ชื่อ /users/profile)
+    async function fetchUserProfile() {
+      try {
+        const cookies = document.cookie.split('; ').reduce((acc, cookie) => {
+          const [name, value] = cookie.split('=');
+          acc[name] = value;
+          return acc;
+        }, {});
+        const token = cookies['Authorization'] ? cookies['Authorization'].replace('Bearer ', '') : null;
+
+        if (!token) {
+          console.log('❌ ไม่มี token ไม่สามารถโหลดข้อมูลผู้ใช้ได้');
+          return;
+        }
+
+        // ดึงข้อมูลผู้ใช้
+        const res = await fetch('/users/profile', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!res.ok) {
+          throw new Error('❌ ดึงข้อมูลผู้ใช้ไม่สำเร็จ');
+        }
+        const userData = await res.json();
+
+        // ถ้ามีข้อมูลก็เอามาใส่ฟอร์ม ถ้า null หรือ "" ก็ให้ช่องเปล่าเพื่อให้กรอก
+        if (userData) {
+          // ชื่อ-นามสกุล
+          if (userData.name) {
+            document.getElementById('fullname').value = userData.name;
+          } else {
+            document.getElementById('fullname').value = '';
+          }
+
+          // เบอร์โทร
+          if (userData.phone) {
+            document.getElementById('phone').value = userData.phone;
+          } else {
+            document.getElementById('phone').value = '';
+          }
+
+          // ที่อยู่
+          if (userData.address) {
+            document.getElementById('address').value = userData.address;
+          } else {
+            document.getElementById('address').value = '';
+          }
+
+          if (userData.address && !userData.province && !userData.postal_code) {
+            document.getElementById('province_lb').style.display = 'none';
+            document.getElementById('province').hidden = true;
+
+            document.getElementById('postal_code_lb').style.display = 'none';
+            document.getElementById('postal_code').hidden = true;
+          }
+
+          // จังหวัด
+          if (userData.province) {
+            document.getElementById('province').value = userData.province;
+          } else {
+            document.getElementById('province').value = '';
+          }
+
+          // รหัสไปรษณีย์
+          if (userData.postal_code) {
+            document.getElementById('postal_code').value = userData.postal_code;
+          } else {
+            document.getElementById('postal_code').value = '';
+          }
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    // เรียกใช้สองฟังก์ชันหลักเมื่อโหลดหน้า
+    window.addEventListener('DOMContentLoaded', () => {
+      displayCart();
+      fetchUserProfile();
+    });
   </script>
 </body>
 
