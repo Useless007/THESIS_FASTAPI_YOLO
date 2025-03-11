@@ -169,7 +169,7 @@
 
         // Approve Order
         function approveOrder() {
-            console.log("🔄 กำลังอนุมัติออเดอร์", selectedOrderId);
+            // console.log("🔄 กำลังอนุมัติออเดอร์", selectedOrderId);
 
             $.ajax({
                 url: `/admin/orders/${selectedOrderId}/approve`,
@@ -178,7 +178,7 @@
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
                 success: function (response) {
-                    console.log("✅ อนุมัติออเดอร์สำเร็จ:", response);
+                    // console.log("✅ อนุมัติออเดอร์สำเร็จ:", response);
                     alert(`✅ Order ${selectedOrderId} approved successfully.`);
                     $(`#order-list li[data-id="${selectedOrderId}"]`).remove(); // ลบออเดอร์ออกจากรายการ
                     closeModal();
@@ -192,7 +192,7 @@
 
         // Cancel Order
         function cancelOrder() {
-            console.log("🗑️ กำลังยกเลิกออเดอร์", selectedOrderId);
+            // console.log("🗑️ กำลังยกเลิกออเดอร์", selectedOrderId);
 
             $.ajax({
                 url: `/admin/orders/${selectedOrderId}/cancel`,
@@ -201,7 +201,7 @@
                     'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
                 success: function (response) {
-                    console.log("✅ ยกเลิกออเดอร์สำเร็จ:", response);
+                    // console.log("✅ ยกเลิกออเดอร์สำเร็จ:", response);
                     alert(`✅ Order ${selectedOrderId} canceled successfully.`);
                     $(`#order-list li[data-id="${selectedOrderId}"]`).remove(); // ลบออเดอร์ออกจากรายการ
                     closeModal();

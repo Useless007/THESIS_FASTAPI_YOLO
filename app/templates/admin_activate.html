@@ -14,11 +14,11 @@
   <style>
     #user-list li.no-users {
       text-align: center;
-      color: #6b7280; /* สีเทา Tailwind */
+      color: #6b7280;
+      /* สีเทา Tailwind */
       font-size: 1rem;
       padding: 1rem;
-  }
-  
+    }
   </style>
 </head>
 
@@ -134,7 +134,7 @@
 
     // ฟังก์ชัน Activate User ผ่าน jQuery AJAX
     function activateUser(userId) {
-      console.log("🔄 กำลังอัปเดตสถานะผู้ใช้", userId);
+      // console.log("🔄 กำลังอัปเดตสถานะผู้ใช้", userId);
 
       $.ajax({
         url: `/admin/${userId}/activate`,
@@ -144,7 +144,7 @@
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         success: function (response) {
-          console.log("✅ สถานะผู้ใช้ถูกอัปเดตสำเร็จ:", response);
+          // console.log("✅ สถานะผู้ใช้ถูกอัปเดตสำเร็จ:", response);
           alert(`✅ User ${userId} activated successfully.`);
           $(`#user-list li[data-id="${userId}"]`).remove(); // ลบผู้ใช้ที่ Activate ออกจากรายการ
         },
@@ -156,7 +156,7 @@
     }
     // ฟังก์ชัน Delete User ผ่าน jQuery AJAX
     function deleteUser(userId) {
-      console.log("🗑️ กำลังลบผู้ใช้", userId);
+      // console.log("🗑️ กำลังลบผู้ใช้", userId);
 
       $.ajax({
         url: `/admin/${userId}`,
@@ -165,7 +165,7 @@
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         success: function (response) {
-          console.log("✅ ผู้ใช้ถูกลบสำเร็จ:", response);
+          // console.log("✅ ผู้ใช้ถูกลบสำเร็จ:", response);
           alert(`✅ User ${userId} deleted successfully.`);
           $(`#user-list li[data-id="${userId}"]`).remove(); // ลบผู้ใช้ออกจากรายการ
         },
@@ -218,7 +218,7 @@
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         success: function (response) {
-          console.log("✅ Role ถูกเปลี่ยนสำเร็จ:", response);
+          // console.log("✅ Role ถูกเปลี่ยนสำเร็จ:", response);
           closeRoleModal();
           alert(`✅ กำหนดยศและ Activate ผู้ใช้ ${userId} สำเร็จ`);
           location.reload(); // รีโหลดหน้าเพื่อแสดงผลการเปลี่ยน Role

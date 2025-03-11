@@ -68,4 +68,7 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
                 print(f"🔄 Redirecting to /page_not_found due to 404: {request.url.path}")
                 return RedirectResponse(url="/page_not_found", status_code=302)
         
+        elif response.status_code == 401:
+            return RedirectResponse(url="/login", status_code=302)
+        
         return response

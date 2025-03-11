@@ -167,3 +167,15 @@ def get_my_orders_page(
         "my_orders.html",
         {"request": request, "current_user": current_user}
     )
+
+@router.get("/contact", response_class=HTMLResponse)
+def get_contact_page(
+    request: Request
+):
+    """
+    แสดงหน้าติดต่อเรา
+    """
+    return templates.TemplateResponse(
+        "contact.html", 
+        {"request": request}
+    )

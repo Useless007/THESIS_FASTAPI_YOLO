@@ -1,4 +1,4 @@
-<!-- app/templates/cart.html -->
+<!-- แสดง QR code สำหรับชำระเงิน -->
 <!DOCTYPE html>
 <html lang="en">
 
@@ -92,19 +92,20 @@
     <h1 class="text-2xl font-semibold mb-4">🛒 ตะกร้าสินค้า</h1>
     <div id="cart-container" class="divide-y divide-gray-200"></div>
 
-    <div class="mt-6 flex justify-between items-center">
-      <h3 id="cart-total" class="text-xl font-bold">ราคารวม: ฿0</h3>
-      <div class="flex gap-2">
-        <!-- ปุ่มล้างตะกร้า -->
-        <button onclick="clearCart()"
-          class="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
-          ล้างตะกร้า
-        </button>
-        <!-- ปุ่มชำระเงิน -->
-        <button onclick="checkout()"
-          class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
-          ชำระเงิน
-        </button>
+
+
+    <div class="mt-8 bg-white rounded-lg shadow-md p-6">
+      <h2 class="text-xl font-semibold mb-4">💳 สแกน QR code เพื่อชำระเงิน</h2>
+      <div class="flex flex-col items-center"></div>
+      <div class="mb-4 p-4 border-2 border-gray-200 rounded-lg bg-white">
+        <!-- แทนที่ path นี้ด้วย path จริงของรูป QR code ของคุณ -->
+        <img id="payment-qrcode" src="/static/assets/payment_qrcode.jpg" alt="QR Code ชำระเงิน"
+          class="max-w-xs mx-auto">
+      </div>
+      <div class="text-center">
+        <p class="font-medium text-gray-800">ชื่อบัญชี: นาย อัครเดช บุบผา</p>
+        <p class="text-gray-600 mt-1">กรุณาสแกนเพื่อชำระเงินจำนวน <span id="qr-amount" class="font-bold">฿0</span></p>
+        <p class="text-sm text-gray-500 mt-2">หลังจากชำระเงินแล้ว กรุณาแนบสลิปการโอนเงินด้านล่าง</p>
       </div>
     </div>
 
@@ -152,11 +153,27 @@
         class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
       <p class="mt-2 text-sm text-gray-500">ไฟล์ต้องเป็นรูปภาพ (JPG, PNG) และมีขนาดไม่เกิน 15MB</p>
     </div>
+
+    <div class="mt-6 flex justify-between items-center">
+      <h3 id="cart-total" class="text-xl font-bold">ราคารวม: ฿0</h3>
+      <div class="flex gap-2">
+        <!-- ปุ่มล้างตะกร้า -->
+        <button onclick="clearCart()"
+          class="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
+          ล้างตะกร้า
+        </button>
+        <!-- ปุ่มชำระเงิน -->
+        <button onclick="checkout()"
+          class="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg transition-all duration-300">
+          ชำระเงิน
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Footer -->
   <footer class="mt-8 p-4 bg-white text-center text-gray-600">
-    &copy; 2024 MyCart. All rights reserved.
+    &copy; 2024 MasterLeng Shop. All rights reserved.
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
@@ -176,6 +193,7 @@
           </div>
         `;
         cartTotal.textContent = "ราคารวม: ฿0";
+        document.getElementById('qr-amount').textContent = "฿0"; // เพิ่มบรรทัดนี้
         return;
       }
 
@@ -198,6 +216,7 @@
       });
 
       cartTotal.textContent = `ราคารวม: ฿${cart.cart_total}`;
+      document.getElementById('qr-amount').textContent = `฿${cart.cart_total}`;
     }
 
     // ลบสินค้าออกจากตะกร้า
@@ -266,7 +285,7 @@
           return response.json();
         })
         .then(data => {
-          console.log('✅ Checkout Success:', data);
+          // console.log('✅ Checkout Success:', data);
           alert(`✅ ชำระเงินสำเร็จ!\nอีเมลผู้สั่งซื้อ: ${data.user_email}\nราคารวม: ฿${data.cart_total}`);
           localStorage.removeItem('cart');
           displayCart();
@@ -289,7 +308,7 @@
         const token = cookies['Authorization'] ? cookies['Authorization'].replace('Bearer ', '') : null;
 
         if (!token) {
-          console.log('❌ ไม่มี token ไม่สามารถโหลดข้อมูลผู้ใช้ได้');
+          // console.log('❌ ไม่มี token ไม่สามารถโหลดข้อมูลผู้ใช้ได้');
           return;
         }
 
