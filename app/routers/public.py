@@ -148,7 +148,7 @@ def logout():
     response.delete_cookie(
         key="Authorization",
         path="/", 
-        domain=".jintaphas.tech"  # ✅ ต้องตรงกับตอนเซ็ต Cookie
+        # domain=".jintaphas.tech"  # ✅ ต้องตรงกับตอนเซ็ต Cookie
     )
 
     return response

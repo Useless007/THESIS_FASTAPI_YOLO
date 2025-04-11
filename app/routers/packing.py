@@ -424,7 +424,8 @@ async def verify_order(
 
         # ✅ ส่ง HTTP Request ไปยัง Home เพื่อให้แจ้งเตือน Admin
         try:
-            url = "https://home.jintaphas.tech/admin/trigger-notify"
+            url = "http://localhost:8000/admin/trigger-notify"
+            # url = "https://home.jintaphas.tech/admin/trigger-notify"
             payload = {
                 "order_id": order_id,
                 "reason": "สินค้าไม่ครบ"

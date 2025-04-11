@@ -148,7 +148,8 @@
             if (!token) return;
 
             try {
-                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/current`, {
+                const response = await fetch(`http://localhost:8001/packing/orders/current`, {
+                // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/current`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -319,7 +320,8 @@
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
             try {
-                const response = await fetch('https://thesis-api.jintaphas.tech/packing/cameras', {
+                const response = await fetch('http://localhost:8001/packing/cameras', {
+                // const response = await fetch('https://thesis-api.jintaphas.tech/packing/cameras', {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -368,7 +370,8 @@
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
             try {
-                const response = await fetch('https://thesis-api.jintaphas.tech/packing/orders/packing', {
+                const response = await fetch('http://localhost:8001/packing/orders/packing', {
+                // const response = await fetch('https://thesis-api.jintaphas.tech/packing/orders/packing', {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -441,7 +444,8 @@
             }
 
             try {
-                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/assign`, {
+                const response = await fetch(`http://localhost:8001/packing/orders/${orderId}/assign`, {
+                // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/assign`, {
                     method: 'PUT',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -525,7 +529,8 @@
                 if (!currentCamera) return;
 
                 // ✅ ใช้ camera_id ในการสตรีม
-                stream.src = `https://thesis-api.jintaphas.tech/packing/stream?camera_id=${currentCamera.id}&token=${token}`;
+                stream.src = `http://localhost:8001/packing/stream?camera_id=${currentCamera.id}&token=${token}`;
+                // stream.src = `https://thesis-api.jintaphas.tech/packing/stream?camera_id=${currentCamera.id}&token=${token}`;
 
                 startCameraBtn.disabled = true;
                 stopCameraBtn.disabled = false;
@@ -546,7 +551,8 @@
                 }
 
                 // ✅ ใช้ camera_id ในการปิดกล้อง
-                await fetch(`https://thesis-api.jintaphas.tech/packing/stop-stream?camera_id=${currentCamera.id}`, {
+                await fetch(`http://localhost:8001/packing/stop-stream?camera_id=${currentCamera.id}`, {
+                // await fetch(`https://thesis-api.jintaphas.tech/packing/stop-stream?camera_id=${currentCamera.id}`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -577,7 +583,8 @@
                 if (!currentCamera) throw new Error('❌ No Camera Selected');
 
                 // ✅ ใช้ camera_id ส่งไปที่ backend
-                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/snapshot?camera_id=${currentCamera.id}`, {
+                const response = await fetch(`http://localhost:8001/packing/snapshot?camera_id=${currentCamera.id}`, {
+                // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/snapshot?camera_id=${currentCamera.id}`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -593,7 +600,8 @@
 
                 // console.log('📸 Sending captured image to backend...');
 
-                const detectResponse = await fetch('https://thesis-api.jintaphas.tech/packing/detect', {
+                const detectResponse = await fetch('http://localhost:8001/packing/detect', {
+                // const detectResponse = await fetch('https://thesis-api.jintaphas.tech/packing/detect', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` },
                     body: formData
@@ -671,7 +679,8 @@
             // console.log("🔍 FormData ส่งไป:", formData);
 
             try {
-                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/verify`, {
+                const response = await fetch(`http://localhost:8001/packing/orders/${orderId}/verify`, {
+                // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/verify`, {
                     method: "PUT",
                     headers: { "Authorization": `Bearer ${token}` },
                     body: formData

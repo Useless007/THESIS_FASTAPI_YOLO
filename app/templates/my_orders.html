@@ -120,7 +120,8 @@
             const modalImg = document.getElementById('modal-image');
 
             // ✅ ใช้ API `/orders/{order_id}/image` แทน `image_path` ตรงๆ
-            modalImg.src = `https://thesis-api.jintaphas.tech/packing/orders/${orderId}/image`;
+            modalImg.src = `http://localhost:8001/packing/orders/${orderId}/image`;
+            // modalImg.src = `https://thesis-api.jintaphas.tech/packing/orders/${orderId}/image`;
 
             modal.style.display = "block";
 
