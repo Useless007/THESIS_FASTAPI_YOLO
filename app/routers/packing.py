@@ -251,7 +251,7 @@ async def detect_objects(
             print("❌ Failed to decode YOLO worker response.")
             raise HTTPException(status_code=500, detail="Invalid response from YOLO worker.")
 
-        response = JSONResponse(content={"detections": output.get("detections", []), "image_path": file_path})
+        response = JSONResponse(content={"detections": output.get("detections", []), "image_path": file_path, "annotated_image_path": output.get("annotated_image", "") })
 
         # response = JSONResponse(content={"detections": [], "image_path": file_path}) # debug capture only comment out
 

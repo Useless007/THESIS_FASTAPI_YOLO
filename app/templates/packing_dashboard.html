@@ -586,6 +586,7 @@
                     throw new Error(`❌ Server responded with ${response.status}: ${response.statusText}`);
                 }
 
+                // เก็บ blob รูปต้นฉบับไว้
                 const imageBlob = await response.blob();
                 const formData = new FormData();
                 formData.append('file', imageBlob, 'captured_image.png');
@@ -609,6 +610,7 @@
                 buttonText.textContent = "📸 ถ่ายภาพ";
                 spinner.classList.add("hidden");
 
+                // แสดงรายการวัตถุที่ตรวจพบ
                 detectionList.innerHTML = '';
                 if (result.detections.length > 0) {
                     result.detections.forEach(det => {
@@ -619,6 +621,8 @@
                 } else {
                     detectionList.innerHTML = `<div class="text-red-500 font-semibold">❌ AI ไม่สามารถตรวจจับสินค้าได้</div>`;
                 }
+
+
 
                 const imgURL = URL.createObjectURL(imageBlob);
                 capturedImage.src = imgURL;
@@ -632,6 +636,10 @@
             } catch (error) {
                 console.error('❌ Error capturing and detecting image:', error.message);
                 detectionList.innerHTML = `<div class="text-red-500 font-semibold">${error.message}</div>`;
+
+                captureBtn.disabled = false;
+                buttonText.textContent = "📸 ถ่ายภาพ";
+                spinner.classList.add("hidden");
             }
         });
 
