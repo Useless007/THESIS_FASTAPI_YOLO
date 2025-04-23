@@ -15,6 +15,8 @@ from app.services.auth import get_current_user
 from app.models.order import Order
 from app.models.user import User
 from app.schemas.user import UserOut
+from app.models.product import Product
+from app.utils.product_categories import get_product_category, CATEGORIES
 
 # เพิ่ม Jinja2 Templates
 templates = Jinja2Templates(directory="app/templates")
@@ -26,18 +28,89 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 router = APIRouter(tags=["HTML"])
 
 
+# @router.get("/", response_class=HTMLResponse)
+# def get_homepage(
+#     request: Request,
+#     current_user: Optional[UserOut] = Depends(get_current_user)
+# ):
+#     """
+#     แสดงหน้าแรก พร้อมเช็คสถานะผู้ใช้
+#     """
+#     # print(f"🏠 Current User: {current_user}")
+#     return templates.TemplateResponse(
+#         "home.html", 
+#         {"request": request, "current_user": current_user}
+#     )
+
 @router.get("/", response_class=HTMLResponse)
 def get_homepage(
     request: Request,
+    db: Session = Depends(get_db),
     current_user: Optional[UserOut] = Depends(get_current_user)
 ):
     """
-    แสดงหน้าแรก พร้อมเช็คสถานะผู้ใช้
+    แสดงหน้าแรก พร้อมสินค้าทั้งหมดและหมวดหมู่
     """
-    # print(f"🏠 Current User: {current_user}")
+    # ดึงสินค้าทั้งหมดจากฐานข้อมูล
+    products = db.query(Product).all()
+    
+    # เพิ่ม category ให้แต่ละสินค้า
+    for product in products:
+        product.category = get_product_category(product.product_id)
+    
     return templates.TemplateResponse(
         "home.html", 
-        {"request": request, "current_user": current_user}
+        {
+            "request": request,
+            "current_user": current_user,
+            "products": products,
+            "categories": CATEGORIES,
+            "current_category": "all"
+        }
+    )
+
+@router.get("/category/{category}", response_class=HTMLResponse)
+def get_products_by_category(
+    request: Request,
+    category: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[UserOut] = Depends(get_current_user)
+):
+    """
+    แสดงสินค้าตามประเภทที่เลือก
+    """
+    # ตรวจสอบว่าประเภทที่ส่งมาถูกต้องหรือไม่
+    if category not in CATEGORIES and category != "all":
+        category = "all"
+    
+    # ดึงสินค้าทั้งหมด
+    products = db.query(Product).all()
+    
+    # กรองสินค้าตามประเภท
+    filtered_products = []
+    if category == "all":
+        filtered_products = products
+    else:
+        for product in products:
+            product_category = get_product_category(product.product_id)
+            if product_category == category:
+                product.category = product_category
+                filtered_products.append(product)
+    
+    # เพิ่ม category ให้กับสินค้าที่เหลือ
+    for product in filtered_products:
+        if not hasattr(product, 'category'):
+            product.category = get_product_category(product.product_id)
+    
+    return templates.TemplateResponse(
+        "home.html", 
+        {
+            "request": request,
+            "current_user": current_user,
+            "products": filtered_products,
+            "categories": CATEGORIES,
+            "current_category": category
+        }
     )
     
 
