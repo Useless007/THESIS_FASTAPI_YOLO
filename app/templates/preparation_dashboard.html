@@ -18,24 +18,79 @@
     </nav>
 
     <main class="p-4 md:p-8">
-        <div class="max-w-full mx-auto py-6">
-            <h2 class="text-2xl font-bold mb-6 text-center">📦 รายการคำสั่งซื้อที่รอการตรวจสอบ</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- คำสั่งซื้อที่รอการตรวจสอบ -->
+            <div class="max-w-full py-6">
+                <h2 class="text-2xl font-bold mb-6 text-center">📦 รายการคำสั่งซื้อที่รอการตรวจสอบ</h2>
 
-            <div class="bg-white shadow-md rounded-lg overflow-x-auto">
-                <table class="w-full text-sm text-center border-collapse border border-gray-200">
-                    <thead>
-                        <tr class="bg-gray-200 text-gray-600 uppercase text-xs font-semibold">
-                            <th class="py-3 px-5 border">Order ID</th>
-                            <th class="py-3 px-5 border">Email</th>
-                            <th class="py-3 px-5 border">Total</th>
-                            <th class="py-3 px-5 border">Date</th>
-                            <th class="py-3 px-5 border">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="orders-table" class="divide-y divide-gray-200">
-                        <!-- Orders will be loaded here dynamically -->
-                    </tbody>
-                </table>
+                <div class="bg-white shadow-md rounded-lg overflow-x-auto">
+                    <table class="w-full text-sm text-center border-collapse border border-gray-200">
+                        <thead>
+                            <tr class="bg-gray-200 text-gray-600 uppercase text-xs font-semibold">
+                                <th class="py-3 px-5 border">Order ID</th>
+                                <th class="py-3 px-5 border">Email</th>
+                                <th class="py-3 px-5 border">Total</th>
+                                <th class="py-3 px-5 border">Date</th>
+                                <th class="py-3 px-5 border">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table" class="divide-y divide-gray-200">
+                            <!-- Orders will be loaded here dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- สินค้าคงเหลือ -->
+            <div class="max-w-full py-6">
+                <h2 class="text-2xl font-bold mb-6 text-center">🔢 สินค้าคงเหลือในคลัง</h2>
+
+                <div class="bg-white shadow-md rounded-lg overflow-hidden">
+                    <div class="mb-4 p-4">
+                        <div class="relative">
+                            <input type="text" id="inventory-search" class="w-full p-2 pl-10 pr-4 border rounded-lg"
+                                placeholder="ค้นหาสินค้า...">
+                            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap gap-2 mt-4">
+                            <button onclick="filterInventory('all')"
+                                class="bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 rounded-full text-sm font-medium">ทั้งหมด</button>
+                            <button onclick="filterInventory('arduino')"
+                                class="bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-3 rounded-full text-sm font-medium">Arduino</button>
+                            <button onclick="filterInventory('raspberry')"
+                                class="bg-red-100 hover:bg-red-200 text-red-700 py-1 px-3 rounded-full text-sm font-medium">Raspberry
+                                Pi</button>
+                            <button onclick="filterInventory('sensor')"
+                                class="bg-green-100 hover:bg-green-200 text-green-700 py-1 px-3 rounded-full text-sm font-medium">เซ็นเซอร์</button>
+                            <button onclick="filterInventory('accessory')"
+                                class="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 py-1 px-3 rounded-full text-sm font-medium">อุปกรณ์เสริม</button>
+                            <button onclick="filterInventory('low')"
+                                class="bg-red-100 hover:bg-red-200 text-red-700 py-1 px-3 rounded-full text-sm font-medium">สินค้าใกล้หมด</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto max-h-96">
+                        <table class="w-full text-sm text-center border-collapse border border-gray-200">
+                            <thead class="sticky top-0">
+                                <tr class="bg-gray-200 text-gray-600 uppercase text-xs font-semibold">
+                                    <th class="py-3 px-5 border">ID</th>
+                                    <th class="py-3 px-5 border">ชื่อสินค้า</th>
+                                    <th class="py-3 px-5 border">หมวดหมู่</th>
+                                    <th class="py-3 px-5 border">ราคา</th>
+                                    <th class="py-3 px-5 border">จำนวนคงเหลือ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventory-table" class="divide-y divide-gray-200">
+                                <!-- Inventory will be loaded here dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
@@ -60,6 +115,23 @@
     </div>
 
     <script>
+        // ตัวแปรสำหรับเก็บข้อมูลสินค้าคงเหลือ
+        let inventoryData = [];
+        let currentFilter = 'all';
+        let searchTerm = '';
+
+        // โหลดข้อมูลเมื่อหน้าเว็บโหลดเสร็จ
+        document.addEventListener('DOMContentLoaded', () => {
+            loadConfirmedOrders();
+            loadInventoryData();
+
+            // เพิ่มการค้นหาสินค้า
+            document.getElementById('inventory-search').addEventListener('input', function (e) {
+                searchTerm = e.target.value.toLowerCase();
+                displayFilteredInventory();
+            });
+        });
+
         // โหลดคำสั่งซื้อที่มีสถานะ confirmed
         function loadConfirmedOrders() {
             fetch('/preparation/orders/confirmed', {
@@ -91,6 +163,92 @@
                 .catch(error => {
                     console.error('❌ Error fetching orders:', error);
                 });
+        }
+
+        // โหลดข้อมูลสินค้าคงเหลือ
+        function loadInventoryData() {
+            fetch('/preparation/products/inventory', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    inventoryData = data;
+                    displayFilteredInventory();
+                })
+                .catch(error => {
+                    console.error('❌ Error fetching inventory data:', error);
+                });
+        }
+
+        // แสดงข้อมูลสินค้าคงเหลือตามฟิลเตอร์
+        function displayFilteredInventory() {
+            const table = document.getElementById('inventory-table');
+            table.innerHTML = '';
+
+            // กรองข้อมูลตามฟิลเตอร์และการค้นหา
+            let filteredData = inventoryData.filter(product => {
+                const matchesSearch =
+                    product.name.toLowerCase().includes(searchTerm) ||
+                    product.product_id.toString().includes(searchTerm);
+
+                if (!matchesSearch) return false;
+
+                if (currentFilter === 'all') return true;
+                if (currentFilter === 'low') return product.stock <= 5;
+                return product.category === currentFilter;
+            });
+
+            filteredData.forEach(product => {
+                // กำหนดสีตามจำนวนสินค้าคงเหลือ
+                let stockClass = '';
+                if (product.stock <= 0) {
+                    stockClass = 'bg-red-100 text-red-800 font-bold';
+                } else if (product.stock <= 5) {
+                    stockClass = 'bg-yellow-100 text-yellow-800';
+                } else {
+                    stockClass = 'bg-green-50 text-green-800';
+                }
+
+                table.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-3 px-5 border">${product.product_id}</td>
+                        <td class="py-3 px-5 border text-left">${product.name}</td>
+                        <td class="py-3 px-5 border">${getCategoryName(product.category)}</td>
+                        <td class="py-3 px-5 border">฿${product.price.toLocaleString()}</td>
+                        <td class="py-3 px-5 border ${stockClass}">${product.stock}</td>
+                    </tr>
+                `;
+            });
+
+            // แสดงข้อความถ้าไม่พบข้อมูล
+            if (filteredData.length === 0) {
+                table.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="py-4 text-center text-gray-500">ไม่พบข้อมูลสินค้าที่ค้นหา</td>
+                    </tr>
+                `;
+            }
+        }
+
+        // ฟิลเตอร์ข้อมูลสินค้าคงเหลือ
+        function filterInventory(filter) {
+            currentFilter = filter;
+            displayFilteredInventory();
+        }
+
+        // แปลงรหัสหมวดหมู่เป็นชื่อหมวดหมู่
+        function getCategoryName(category) {
+            const categories = {
+                'arduino': 'Arduino',
+                'raspberry': 'Raspberry Pi',
+                'sensor': 'เซ็นเซอร์',
+                'accessory': 'อุปกรณ์เสริม',
+                'other': 'อื่นๆ'
+            };
+            return categories[category] || 'อื่นๆ';
         }
 
         // ดูรายละเอียดคำสั่งซื้อ
@@ -131,14 +289,22 @@
                     'Authorization': `Bearer ${token}`
                 }
             })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.message || 'เกิดข้อผิดพลาดในการอนุมัติคำสั่งซื้อ');
+                        });
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     alert(data.message);
                     loadConfirmedOrders();
+                    loadInventoryData(); // โหลดข้อมูลสินค้าคงเหลือใหม่หลังจากอนุมัติคำสั่งซื้อ
                 })
                 .catch(error => {
                     console.error('❌ Error approving order:', error);
-                    alert('เกิดข้อผิดพลาดในการอนุมัติคำสั่งซื้อ');
+                    alert(error.message || 'เกิดข้อผิดพลาดในการอนุมัติคำสั่งซื้อ');
                 });
         }
 
@@ -166,8 +332,6 @@
         function closeOrderModal() {
             document.getElementById('orderDetailsModal').classList.add('hidden');
         }
-
-        document.addEventListener('DOMContentLoaded', loadConfirmedOrders);
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>

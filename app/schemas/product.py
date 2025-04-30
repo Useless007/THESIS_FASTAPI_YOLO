@@ -8,6 +8,7 @@ class ProductBase(BaseModel):
     price: float
     description: str
     image_path: str
+    stock: int = 0
 
 class ProductCreate(ProductBase):
     pass
@@ -20,6 +21,7 @@ class ProductUpdate(BaseModel):
     price: Optional[float] = None
     description: Optional[str] = None
     image_path: Optional[str] = None
+    stock: Optional[int] = None
 
     class Config:
         from_attributes = True

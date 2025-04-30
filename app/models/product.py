@@ -12,9 +12,10 @@ class Product(Base):
     price = Column(Float, nullable=False)
     description = Column(Text, nullable=False)
     image_path = Column(String(255), nullable=False)
+    stock = Column(Integer, default=0)
     
     # ความสัมพันธ์กับตาราง OrderItem
     order_items = relationship("OrderItem", back_populates="product")
     
     def __repr__(self):
-        return f"<Product(product_id={self.product_id}, name='{self.name}', price={self.price})>"
+        return f"<Product(product_id={self.product_id}, name='{self.name}', price={self.price}, stock={self.stock})>"
