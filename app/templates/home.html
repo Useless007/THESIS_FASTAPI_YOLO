@@ -407,8 +407,8 @@
                     <ul class="mt-4 space-y-2">
                         {% for category_key, category_name in categories.items() %}
                         <li>
-                            <a href="/category/{{ category_key }}" 
-                               class="block w-full text-left px-4 py-2 bg-white rounded-lg hover:bg-gray-100 
+                            <a href="/category/{{ category_key }}"
+                                class="block w-full text-left px-4 py-2 bg-white rounded-lg hover:bg-gray-100 
                                      {% if current_category == category_key %}bg-blue-100 border-blue-500 border{% endif %}">
                                 {{ category_name }}
                             </a>
@@ -420,24 +420,51 @@
                 <!-- Product Cards -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full" id="product-grid">
                     {% for product in products %}
-                    <div class="bg-white rounded-lg shadow p-4 flex flex-col h-[450px]" 
-                         data-category="{{ product.category }}"
-                         data-id="{{ product.product_id }}" 
-                         data-name="{{ product.name }}" 
-                         data-price="{{ product.price }}">
+                    <div class="bg-white rounded-lg shadow p-4 flex flex-col h-[450px]"
+                        data-category="{{ product.category }}" data-id="{{ product.product_id }}"
+                        data-name="{{ product.name }}" data-price="{{ product.price }}"
+                        data-stock="{{ product.stock }}">
                         <!-- รูปภาพที่มีความสูงคงที่ -->
-                        <div class="h-48 flex items-center justify-center mb-4">
+                        <div class="h-48 flex items-center justify-center mb-3">
                             <img src="{{ product.image_path }}" alt="{{ product.name }}"
-                                 class="rounded-lg max-h-full object-contain w-full">
+                                class="rounded-lg max-h-full object-contain w-full">
                         </div>
-                        <h3 class="text-lg font-semibold text-gray-800 h-14 line-clamp-2">{{ product.name }}</h3>
-                        <p class="text-gray-600 text-sm h-28 overflow-hidden line-clamp-4">{{ product.description }}</p>
-                        <div class="mt-auto pt-4 flex items-center justify-between">
+                        <!-- ชื่อสินค้า -->
+                        <h3 class="text-lg font-semibold text-gray-800 mb-1 line-clamp-2">{{ product.name }}</h3>
+
+                        <!-- คำอธิบายสินค้า - ใช้ tooltip แสดงข้อความเต็มเมื่อ hover -->
+                        <div class="group relative mb-2">
+                            <p
+                                class="text-gray-600 text-sm h-20 overflow-hidden line-clamp-3 group-hover:text-blue-600 transition-colors">
+                                {{ product.description }}
+                            </p>
+                            <div
+                                class="opacity-0 group-hover:opacity-100 absolute bg-white p-2 rounded-md shadow-lg border border-gray-200 
+                                      z-10 w-64 text-sm text-gray-700 transition-opacity duration-300 -right-1 bottom-full">
+                                {{ product.description }}
+                            </div>
+                        </div>
+
+                        <!-- ราคาและข้อมูลสต็อก -->
+                        <div class="mt-auto pt-2 flex items-center justify-between">
                             <span class="text-xl font-bold text-gray-800">฿{{ '{:,.2f}'.format(product.price) }}</span>
-                            <button class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                                    onclick="addToCart({{ product.product_id }}, '{{ product.name|e }}', {{ product.price }})">
+                            <span class="text-sm bg-gray-100 px-2 py-1 rounded-lg text-gray-600">คงเหลือ {{
+                                product.stock }}</span>
+                        </div>
+
+                        <!-- ปุ่มเพิ่มในตะกร้า -->
+                        <div class="mt-2 pt-2 border-t border-gray-100">
+                            {% if product.stock and product.stock > 0 %}
+                            <button class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                                onclick="addToCart({{ product.product_id }}, '{{ product.name|e }}', {{ product.price }}, {{ product.stock }})">
                                 เพิ่มในตะกร้า
                             </button>
+                            {% else %}
+                            <button class="w-full bg-gray-400 text-white px-4 py-2 rounded-lg cursor-not-allowed"
+                                disabled>
+                                สินค้าหมด
+                            </button>
+                            {% endif %}
                         </div>
                     </div>
                     {% endfor %}
@@ -449,7 +476,6 @@
 
         </div>
     </section>
-
 
 
 
@@ -535,7 +561,7 @@
         }
 
         // ฟังก์ชันเพิ่มสินค้าไปยังตะกร้า
-        function addToCart(productId, name, price) {
+        function addToCart(productId, name, price, stockAvailable) {
             // เช็คว่ามีการล็อกอินหรือไม่
             const token = document.cookie.split('; ').find(row => row.startsWith('Authorization='));
             if (!token) {
@@ -556,21 +582,65 @@
                 return;
             }
 
+            // ดึงข้อมูลตะกร้าปัจจุบัน หรือสร้างใหม่ถ้ายังไม่มี
             let cart = JSON.parse(localStorage.getItem('cart')) || { cart: [], cart_total: 0 };
 
             // ตรวจสอบว่าสินค้ามีอยู่ในตะกร้าหรือไม่
             let existingProduct = cart.cart.find(item => item.product_id === productId);
 
+            // ถ้าสินค้ามีอยู่แล้วในตะกร้า
             if (existingProduct) {
-                existingProduct.quantity += 1;
-                existingProduct.total = existingProduct.price * existingProduct.quantity;
+                // ตรวจสอบว่าจำนวนที่จะเพิ่มไม่เกินสต็อกที่มี
+                if (existingProduct.quantity < stockAvailable) {
+                    existingProduct.quantity += 1;
+                    existingProduct.total = existingProduct.price * existingProduct.quantity;
+
+                    // แสดงแจ้งเตือนถ้าใกล้หมดสต็อก
+                    if (existingProduct.quantity === stockAvailable) {
+                        Swal.fire({
+                            title: 'เพิ่มสินค้าสำเร็จ',
+                            text: `คุณได้เพิ่ม ${name} ครบจำนวนสต็อกที่มี (${stockAvailable} ชิ้น) แล้ว`,
+                            icon: 'info',
+                            timer: 2000,
+                            showConfirmButton: false
+                        });
+                    } else {
+                        Swal.fire({
+                            title: 'เพิ่มสินค้าสำเร็จ',
+                            text: `${name} ถูกเพิ่มไปยังตะกร้าของคุณ (${existingProduct.quantity}/${stockAvailable})`,
+                            icon: 'success',
+                            timer: 1500,
+                            showConfirmButton: false
+                        });
+                    }
+                } else {
+                    // แจ้งเตือนกรณีเกินสต็อก
+                    Swal.fire({
+                        title: 'ไม่สามารถเพิ่มสินค้าได้',
+                        text: `คุณได้เพิ่ม ${name} ครบจำนวนที่มีในสต็อกแล้ว (${stockAvailable} ชิ้น)`,
+                        icon: 'error',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    return;
+                }
             } else {
+                // กรณียังไม่มีสินค้าในตะกร้า
                 cart.cart.push({
                     product_id: productId,
                     name: name,
                     price: price,
                     quantity: 1,
-                    total: price
+                    total: price,
+                    max_stock: stockAvailable // เก็บข้อมูลสต็อกสูงสุดไว้ด้วย
+                });
+
+                Swal.fire({
+                    title: 'เพิ่มสินค้าสำเร็จ',
+                    text: `${name} ถูกเพิ่มไปยังตะกร้าของคุณ (1/${stockAvailable})`,
+                    icon: 'success',
+                    timer: 1500,
+                    showConfirmButton: false
                 });
             }
 
@@ -579,23 +649,10 @@
 
             // บันทึกลง LocalStorage
             localStorage.setItem('cart', JSON.stringify(cart));
-            // console.log('🛒 ตะกร้าสินค้า:', cart);
-            Swal.fire({
-                title: 'เพิ่มสินค้าลงตะกร้าแล้ว!',
-                text: `${name} ถูกเพิ่มไปยังตะกร้าของคุณ`,
-                icon: 'success',
-                timer: 1500,
-                showConfirmButton: false
-            });
         }
-
 
         // เรียกใช้ฟังก์ชัน
         checkLoginStatus();
-
-
-
-
     </script>
 
 

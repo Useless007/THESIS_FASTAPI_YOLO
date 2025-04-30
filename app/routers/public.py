@@ -65,7 +65,8 @@ def get_homepage(
             "price": product.price,
             "description": product.description,
             "image_path": product.image_path,
-            "category": category
+            "category": category,
+            "stock": product.stock  # เพิ่มข้อมูล stock
         }
         products_with_category.append(product_dict)
     
@@ -107,7 +108,8 @@ def get_products_by_category(
             "price": product.price,
             "description": product.description,
             "image_path": product.image_path,
-            "category": product_category
+            "category": product_category,
+            "stock": product.stock  # เพิ่มข้อมูล stock
         }
         
         if category == "all" or product_category == category:

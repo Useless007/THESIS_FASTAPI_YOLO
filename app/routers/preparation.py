@@ -131,7 +131,7 @@ def approve_order(
     
     # เปลี่ยนสถานะออเดอร์เป็น packing
     order.status = "packing"
-    order.assigned_to = current_user.id  # บันทึกว่าใครเป็นคนยืนยันออเดอร์นี้
+    # order.assigned_to = current_user.id  # บันทึกว่าใครเป็นคนยืนยันออเดอร์นี้
     
     db.commit()
     return {"message": f"✅ Order {order_id} approved successfully and stock updated"}
