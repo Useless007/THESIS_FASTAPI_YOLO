@@ -251,7 +251,7 @@ def init_db():
                 email="preparation@example.com",
                 password=hash_password("preparation1234"),
                 role_id=1,  # employee
-                position_id=4,  # preparation
+                position_id=3,  # preparation
                 name="preparation Staffone",
                 phone="0891234588",
                 created_at=datetime.now(),

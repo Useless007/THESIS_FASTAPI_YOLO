@@ -5,6 +5,7 @@ from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.auth import verify_password, hash_password
 from fastapi import HTTPException
+from datetime import datetime
 
 
 def create_user(db: Session, user: UserCreate):
@@ -12,14 +13,14 @@ def create_user(db: Session, user: UserCreate):
     hashed_password = hash_password(user.password)
     
     db_user = User(
-        # username=user.username,
         email=user.email,
         password=hashed_password,
         name=user.name,
-        role=user.role,  # ระบุบทบาท (customer, admin, staff)
-        address=user.address,
-        position=user.position,
+        role_id=user.role_id,  # ใช้ role_id แทน role
+        position_id=user.position_id,  # ใช้ position_id แทน position
         phone=user.phone,
+        created_at=datetime.utcnow(),
+        is_active=False
     )
     db.add(db_user)
     db.commit()
@@ -47,16 +48,24 @@ def update_user(db: Session, user_id: int, user: UserUpdate):
     # แฮชรหัสผ่านหากมีการอัปเดต
     if user.password:
         hashed_password = hash_password(user.password)
+        db_user.password = hashed_password
 
     # อัปเดตฟิลด์ต่างๆ
-    # db_user.username = user.username or db_user.username
-    db_user.email = user.email or db_user.email
-    db_user.password = hashed_password or db_user.password
-    db_user.name = user.name or db_user.name
-    db_user.address = user.address or db_user.address
-    db_user.phone = user.phone or db_user.phone
-    db_user.role = user.role or db_user.role
-    db_user.position = user.position or db_user.position
+    if user.email:
+        db_user.email = user.email
+    if user.name:
+        db_user.name = user.name
+    if user.phone:
+        db_user.phone = user.phone
+    if user.role_id:
+        db_user.role_id = user.role_id
+    if user.position_id:
+        db_user.position_id = user.position_id
+    if user.is_active is not None:
+        db_user.is_active = user.is_active
+    
+    db_user.updated_at = datetime.utcnow()
+    
     db.commit()
     db.refresh(db_user)
     return db_user
@@ -76,10 +85,11 @@ def update_user_status(db: Session, user_id: int, is_active: bool):
     if not db_user:
         return None
     db_user.is_active = is_active
+    db_user.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(db_user)
     return db_user
 
 # ดึงข้อมูลผู้ใช้ตามบทบาท
-def get_users_by_role(db: Session, role: str):
-    return db.query(User).filter(User.role == role, User.is_active == True).all()
+def get_users_by_role(db: Session, role_id: int):
+    return db.query(User).filter(User.role_id == role_id, User.is_active == True).all()

@@ -337,7 +337,7 @@
                     const option = document.createElement('option');
                     option.value = camera.id;
                     // สมมุติว่า camera มี property table_number, name และ stream_url
-                    option.textContent = `โต๊ะ ${camera.table_number} - กล้อง ${camera.name}`;
+                    option.textContent = `กล้อง ${camera.name}`;
                     option.dataset.streamUrl = camera.stream_url;
                     cameraDropdown.appendChild(option);
                 });

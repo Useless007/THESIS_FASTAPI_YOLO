@@ -1,8 +1,8 @@
-# app/routers/praparation.py
+# app/routers/preparation.py
 
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import JSONResponse, HTMLResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
 from app.models.order import Order
 from app.models.user import User
@@ -19,33 +19,51 @@ router = APIRouter(prefix="/preparation", tags=["Preparation Staff"])
 @router.get("/orders/confirmed", response_class=JSONResponse)
 def get_confirmed_orders(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "preparation staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 3))
 ):
-    orders = db.query(Order).filter(Order.status == "confirmed").all()
-    return [{"id": order.order_id, "email": order.email, "total": order.total, "created_at": order.created_at} for order in orders]
+    # ใช้ joinedload เพื่อโหลดข้อมูล user มาด้วย
+    orders = db.query(Order).options(joinedload(Order.user)).filter(Order.status == "confirmed").all()
+    return [{
+        "id": order.order_id, 
+        "email": order.user.email if order.user else None,  # ดึง email จาก user relationship
+        "total": order.total, 
+        "created_at": order.created_at
+    } for order in orders]
 
 # ✅ ดึงรายละเอียดคำสั่งซื้อ
 @router.get("/orders/{order_id}", response_class=JSONResponse)
 def get_order_details(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "preparation staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 3))
 ):
     """
     ดึงรายละเอียดคำสั่งซื้อ รวมถึงรายการสินค้า
     """
-    order = db.query(Order).filter(Order.order_id == order_id).first()
+    # ใช้ joinedload เพื่อโหลดข้อมูล user และ order_items
+    order = db.query(Order).options(
+        joinedload(Order.user),
+        joinedload(Order.order_items)
+    ).filter(Order.order_id == order_id).first()
+    
     if not order:
         raise HTTPException(status_code=404, detail="❌ Order not found")
 
-    try:
-        items = json.loads(order.item) if order.item else []
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="❌ Invalid JSON format in order items")
+    # ดึงข้อมูลสินค้าจาก order_items relationship
+    items = []
+    if order.order_items:
+        for item in order.order_items:
+            items.append({
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+                "price": item.price_at_order,
+                "total": item.total_item_price,
+                "product_name": item.product.name if item.product else "Unknown"
+            })
 
     return {
         "id": order.order_id,
-        "email": order.email,
+        "email": order.user.email if order.user else None,
         "total": order.total,
         "created_at": order.created_at,
         "items": items
@@ -56,7 +74,7 @@ def get_order_details(
 def approve_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "preparation staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 3))
 ):
     """
     อนุมัติคำสั่งซื้อ (เปลี่ยนสถานะเป็น packing)
@@ -73,7 +91,7 @@ def approve_order(
 def cancel_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "preparation staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 3))
 ):
     """
     ยกเลิกคำสั่งซื้อ (เปลี่ยนสถานะเป็น cancelled)

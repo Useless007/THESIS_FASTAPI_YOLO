@@ -37,7 +37,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 admin_router = APIRouter(
     prefix="/admin",
     tags=["Admin"],
-    dependencies=[Depends(get_user_with_role_and_position("employee", "admin"))],
+    dependencies=[Depends(get_user_with_role_and_position(1, 2))],
 )
 protected_router = APIRouter(tags=["Auth"])
 
@@ -138,7 +138,8 @@ def post_register_form(
         email=email,
         password=password,
         name=name,
-        role="customer",
+        role_id=2,  # 2 = customer
+        is_active=False
     )
     try:
         # สร้างผู้ใช้ใหม่
@@ -165,10 +166,10 @@ def post_register_form(
         if "Duplicate entry" in str(e.orig):
             message = "❌ Email นี้มีอยู่ในระบบแล้ว"
         else:
-            message = "❌ Registration failed due to a database error."
+            message = f"❌ Registration failed due to a database error: {str(e)}"
         message_color = "red"
     except Exception as e:
-        message = "❌ Registration failed due to an unexpected error."
+        message = f"❌ Registration failed due to an unexpected error: {str(e)}"
         message_color = "red"
 
     return templates.TemplateResponse(
@@ -223,13 +224,27 @@ def check_user_role(
 # PUBLIC USER ENDPOINTS
 # ---------------------------------------------------------------------
 
-# ตัวอย่างคร่าว ๆ
 @router.get("/profile")
 def get_user_profile(current_user: User = Depends(get_current_user)):
+    # ดึงข้อมูลที่อยู่จาก relationship ถ้ามี
+    address_info = None
+    if current_user.addresses:
+        # ดึงที่อยู่แรกจาก list (ถ้ามีหลายที่อยู่)
+        address = current_user.addresses[0]
+        address_info = {
+            "house_number": address.house_number,
+            "village_no": address.village_no,
+            "subdistrict": address.subdistrict,
+            "district": address.district,
+            "province": address.province,
+            "postal_code": address.postal_code,
+            "full_address": f"{address.house_number} หมู่ {address.village_no} ต.{address.subdistrict} อ.{address.district} จ.{address.province} {address.postal_code}"
+        }
+    
     return {
         "name": current_user.name,
         "phone": current_user.phone,
-        "address": current_user.address  # ใส่อะไรไปก็ส่งกลับมาแบบนั้น
+        "address": address_info  # ส่งข้อมูลที่อยู่แบบ object
     }
 
 
@@ -248,7 +263,7 @@ def create_new_user(user: UserCreate, db: Session = Depends(get_db)):
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
     ):
     
     """
@@ -260,7 +275,7 @@ def get_user(
     raise HTTPException(status_code=404, detail="User not found")
 
 @router.put("/{user_id}", response_model=UserOut)
-def update_user_info(user_id: int, user: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin"))):
+def update_user_info(user_id: int, user: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))):
     """
     อัปเดตข้อมูล User
     """
@@ -277,32 +292,35 @@ def update_user_info(user_id: int, user: UserUpdate, db: Session = Depends(get_d
 @router.get("/", response_model=List[UserOut], tags=["Admin"])
 def get_users(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin")),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2)),
 ):
     """
     ดึงข้อมูล User ทั้งหมด (Admin Only)
     """
     return get_all_users(db=db)
 
-@admin_router.put("/{user_id}/activate", response_model=UserOut)
+@admin_router.put("/{user_id}/activate")
 def activate_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin")),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2)),
 ):
     """
     เปิดใช้งาน User (Admin Only)
     """
     db_user = get_user_by_id(db=db, user_id=user_id)
+    
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    # print(f"🔄 Activating user: {db_user.email}")
     return update_user_status(db=db, user_id=user_id, is_active=True)
 
-@admin_router.put("/{user_id}/deactivate", response_model=UserOut)
+@admin_router.put("/{user_id}/deactivate")
 def deactivate_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin")),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2)),
 ):
     """
     ปิดใช้งาน User (Admin Only)
@@ -312,11 +330,11 @@ def deactivate_user(
         raise HTTPException(status_code=404, detail="User not found")
     return update_user_status(db=db, user_id=user_id, is_active=False)
 
-@admin_router.delete("/{user_id}", response_model=UserOut)
+@admin_router.delete("/{user_id}")
 def delete_user_info(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "admin")),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2)),
 ):
     """
     ลบ User (Admin Only)

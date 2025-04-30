@@ -176,8 +176,9 @@
         })
         .then(response => response.json())
         .then(data => {
+            // console.log(data);
             // แสดงประวัติการทำงานเฉพาะ employee ตำแหน่ง packing staff
-            if (data.role === 'employee' && data.position === 'packing staff') {
+            if (data.role.role_id === 1 && data.position.position_id === 4) {
                 document.getElementById('work-history-option').classList.remove('hidden');
             }
         })

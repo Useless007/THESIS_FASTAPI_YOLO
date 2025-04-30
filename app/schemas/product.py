@@ -3,30 +3,35 @@
 from pydantic import BaseModel
 from typing import Optional
 
-class ProductCreate(BaseModel):
+class ProductBase(BaseModel):
     name: str
-    description: Optional[str] = None
     price: float
-    stock: int
+    description: str
+    image_path: str
+
+class ProductCreate(ProductBase):
+    pass
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
-    description: Optional[str] = None
     price: Optional[float] = None
-    stock: Optional[int] = None
-
-    class Config:
-        orm_mode = True
-
-class ProductOut(BaseModel):
-    id: int
-    name: str
     description: Optional[str] = None
-    price: float
-    stock: int
+    image_path: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+class ProductOut(ProductBase):
+    product_id: int
+
+    class Config:
+        from_attributes = True
+
+class ProductWithCategory(ProductOut):
+    category: Optional[str] = None  # สำหรับแสดงหมวดหมู่ที่ได้จาก utils
+
+    class Config:
+        from_attributes = True

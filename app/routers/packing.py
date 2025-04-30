@@ -6,10 +6,12 @@ import requests
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response, Request, Form
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.user import User
 from app.models.camera import Camera
 from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.product import Product
 from app.schemas.order import VerifyRequest
 from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
 from app.database import get_db
@@ -83,7 +85,7 @@ async def stop_camera(camera_id: int):
 async def snapshot(
     camera_id: int = Query(..., description="ID ของกล้องที่ต้องการแคปภาพ"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     global video_captures
 
@@ -108,7 +110,7 @@ async def stream_video(
     camera_id: int = Query(..., description="ID ของกล้องที่ต้องการสตรีม"),
     token: str = Header(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     global video_captures
 
@@ -154,7 +156,7 @@ async def stream_video(
 async def stop_stream(
     camera_id: int = Query(..., description="ID ของกล้องที่ต้องการปิด"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     print(f"🔄 คำขอให้ปิดกล้อง {camera_id}")
     
@@ -208,7 +210,7 @@ def process_yolo(file_path: str):
 async def detect_objects(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     """
     ตรวจจับวัตถุจากภาพที่อัปโหลดโดยใช้ subprocess เรียก yolo_worker.py
@@ -267,7 +269,7 @@ async def detect_objects(
 @router.get("/cameras", response_class=JSONResponse)
 def get_cameras(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     """
     ดึงรายชื่อกล้องที่เก็บไว้ใน DB
@@ -277,7 +279,7 @@ def get_cameras(
     return [
         {
             "id": camera.id,
-            "table_number": camera.table_number,
+            # "table_number": camera.table_number,
             "name": camera.name,
             "stream_url": camera.stream_url
         } for camera in cameras
@@ -287,23 +289,24 @@ def get_cameras(
 @router.get("/orders/packing", response_class=JSONResponse)
 def get_packing_orders(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     """
     ดึงรายการคำสั่งซื้อที่มีสถานะ packing เพื่อนำมาตรวจสอบว่าสินค้ามีหรือไม่
     เฉพาะออเดอร์ที่ยังไม่ถูก assign หรือออเดอร์ที่ถูก assign ให้กับพนักงานปัจจุบัน
     """
     orders = db.query(Order)\
+        .options(joinedload(Order.user))\
         .filter(or_(Order.assigned_to == None, Order.assigned_to == current_user.id))\
         .filter(Order.status.in_(["packing", "verifying"]))\
         .all()
     return [
         {
             "id": order.order_id,
-            "email": order.email,
+            "email": order.user.email if order.user else None,  # เปลี่ยนจาก order.email เป็น order.user.email
             "total": order.total,
             "created_at": order.created_at,
-            "items": order.item,
+            "items": order.order_items,
             "assigned_to": order.assigned_to
         } for order in orders
     ]
@@ -312,15 +315,19 @@ def get_packing_orders(
 def assign_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     order = (
         db.query(Order)
+        .options(
+            joinedload(Order.user),
+            joinedload(Order.order_items).joinedload(OrderItem.product)
+        )
         .filter(
             and_(
                 Order.order_id == order_id,
-                Order.status.in_(["packing", "pending"]),  # ตรวจสอบเฉพาะออเดอร์ที่ยังไม่ได้ยืนยัน
-                Order.assigned_to == None  # ยังไม่มีพนักงานรับ
+                Order.status.in_(["packing", "pending"]),
+                Order.assigned_to == None
             )
         )
         .with_for_update()
@@ -335,30 +342,23 @@ def assign_order(
     db.commit()
     db.refresh(order)
 
-    # ✅ แปลง `items` จาก string JSON เป็น list
-    try:
-        items = json.loads(order.item)
-    except json.JSONDecodeError:
-        items = []
-        print("❌ Error decoding items JSON")
-
-    # ✅ สร้างข้อมูลที่พร้อมใช้ใน Frontend
+    # Format the order items properly
     formatted_items = [
         {
-            "product_id": item.get("product_id", "N/A"),
-            "product_name": item.get("name", "Unknown"),
-            "quantity": item.get("quantity", 0),
-            "price": item.get("price", 0.0),
-            "total": item.get("total", 0.0)
+            "product_id": item.product_id,
+            "product_name": item.product.name if item.product else "Unknown",
+            "quantity": item.quantity,
+            "price": item.price_at_order,
+            "total": item.total_item_price
         }
-        for item in items
+        for item in order.order_items
     ]
 
     order_data = {
         "order_id": order.order_id,
-        "customer_email": order.email,
+        "customer_email": order.user.email if order.user else None,
         "total_price": order.total,
-        "items": formatted_items,  # ✅ ใช้ข้อมูลที่แปลงแล้ว
+        "items": formatted_items,
         "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -369,7 +369,7 @@ async def upload_packed_image(
     order_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     """
     อัปโหลดรูปสินค้าที่แพ็คเสร็จแล้ว และเก็บไว้ในฐานข้อมูล
@@ -397,7 +397,7 @@ async def verify_order(
     verified: bool = Form(...),
     file: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     """
     ✅ พนักงานกดยืนยันสินค้าครบหรือไม่ครบ
@@ -447,38 +447,40 @@ async def verify_order(
 @router.get("/orders/current", response_class=JSONResponse)
 def get_current_order(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive("employee", "packing staff"))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
     """
     ✅ ดึงข้อมูลออเดอร์ที่พนักงานกำลังแพ็คอยู่
     """
-    order = db.query(Order).filter(
-        Order.assigned_to == current_user.id,  
-        Order.status.in_(["verifying", "packing"])  # ✅ ดึงเฉพาะออเดอร์ที่ยังไม่เสร็จ
-    ).order_by(Order.created_at.desc()).first()  # ✅ เอาออเดอร์ล่าสุดที่พนักงานทำอยู่
+    order = db.query(Order)\
+        .options(
+            joinedload(Order.user),
+            joinedload(Order.order_items).joinedload(OrderItem.product)
+        )\
+        .filter(
+            Order.assigned_to == current_user.id,  
+            Order.status.in_(["verifying", "packing"])
+        )\
+        .order_by(Order.created_at.desc())\
+        .first()
 
     if not order:
         return JSONResponse(content={"message": "No active order"}, status_code=200)
 
-    try:
-        items = json.loads(order.item)
-    except json.JSONDecodeError:
-        items = []
-
     formatted_items = [
         {
-            "product_id": item.get("product_id", "N/A"),
-            "product_name": item.get("name", "Unknown"),
-            "quantity": item.get("quantity", 0),
-            "price": item.get("price", 0.0),
-            "total": item.get("total", 0.0)
+            "product_id": item.product_id,
+            "product_name": item.product.name if item.product else "Unknown",
+            "quantity": item.quantity,
+            "price": item.price_at_order,
+            "total": item.total_item_price
         }
-        for item in items
+        for item in order.order_items
     ]
 
     return JSONResponse(content={
         "order_id": order.order_id,
-        "customer_email": order.email,
+        "customer_email": order.user.email if order.user else None,
         "total_price": order.total,
         "items": formatted_items,
         "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
@@ -489,12 +491,13 @@ def get_current_order(
 async def get_order_image(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)  # ✅ เช็คว่าผู้ใช้ล็อกอินอยู่
+    current_user: User = Depends(get_current_user)
 ):
     """
     ✅ ให้ API ส่งรูปภาพสินค้าแพ็คแล้วแทนการเข้าถึงโดยตรง
     """
-    order = db.query(Order).filter(Order.order_id == order_id, Order.email == current_user.email).first()
+    order = db.query(Order).filter(Order.order_id == order_id, Order.user_id == current_user.id).first()
+    
     if not order:
         raise HTTPException(status_code=404, detail="Order not found or you don't have permission.")
 

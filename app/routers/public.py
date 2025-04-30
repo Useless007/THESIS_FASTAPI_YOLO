@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request, Depends,HTTPException, File, UploadFile,
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional,Dict
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -46,7 +47,7 @@ router = APIRouter(tags=["HTML"])
 def get_homepage(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[UserOut] = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """
     แสดงหน้าแรก พร้อมสินค้าทั้งหมดและหมวดหมู่
@@ -54,16 +55,26 @@ def get_homepage(
     # ดึงสินค้าทั้งหมดจากฐานข้อมูล
     products = db.query(Product).all()
     
-    # เพิ่ม category ให้แต่ละสินค้า
+    # สร้าง list ใหม่สำหรับสินค้าที่มี category
+    products_with_category = []
     for product in products:
-        product.category = get_product_category(product.product_id)
+        category = get_product_category(product.product_id)
+        product_dict = {
+            "product_id": product.product_id,
+            "name": product.name,
+            "price": product.price,
+            "description": product.description,
+            "image_path": product.image_path,
+            "category": category
+        }
+        products_with_category.append(product_dict)
     
     return templates.TemplateResponse(
         "home.html", 
         {
             "request": request,
             "current_user": current_user,
-            "products": products,
+            "products": products_with_category,
             "categories": CATEGORIES,
             "current_category": "all"
         }
@@ -74,7 +85,7 @@ def get_products_by_category(
     request: Request,
     category: str,
     db: Session = Depends(get_db),
-    current_user: Optional[UserOut] = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """
     แสดงสินค้าตามประเภทที่เลือก
@@ -86,21 +97,21 @@ def get_products_by_category(
     # ดึงสินค้าทั้งหมด
     products = db.query(Product).all()
     
-    # กรองสินค้าตามประเภท
+    # แปลงสินค้าเป็น dictionary และกรองตามประเภท
     filtered_products = []
-    if category == "all":
-        filtered_products = products
-    else:
-        for product in products:
-            product_category = get_product_category(product.product_id)
-            if product_category == category:
-                product.category = product_category
-                filtered_products.append(product)
-    
-    # เพิ่ม category ให้กับสินค้าที่เหลือ
-    for product in filtered_products:
-        if not hasattr(product, 'category'):
-            product.category = get_product_category(product.product_id)
+    for product in products:
+        product_category = get_product_category(product.product_id)
+        product_dict = {
+            "product_id": product.product_id,
+            "name": product.name,
+            "price": product.price,
+            "description": product.description,
+            "image_path": product.image_path,
+            "category": product_category
+        }
+        
+        if category == "all" or product_category == category:
+            filtered_products.append(product_dict)
     
     return templates.TemplateResponse(
         "home.html", 
@@ -137,11 +148,14 @@ async def checkout(
     payment_slip: UploadFile = File(...),
     fullname: str = Form(...),
     phone: str = Form(...),
-    address: str = Form(...),
+    house_number: str = Form(...),
+    village_no: str = Form(...),
+    subdistrict: str = Form(...),
+    district: str = Form(...),
     province: str = Form(...),
     postal_code: str = Form(...),
     db: Session = Depends(get_db),
-    current_user: Optional[UserOut] = Depends(get_current_user)
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """
     สั่งซื้อสินค้า พร้อมแนบสลิปการโอนเงิน และบันทึกในฐานข้อมูล
@@ -164,14 +178,27 @@ async def checkout(
     if payment_slip.size > 15 * 1024 * 1024:  # 15MB
         raise HTTPException(status_code=400, detail="❌ ขนาดไฟล์ต้องไม่เกิน 15MB")
 
-    # อัพเดทที่อยู่ของผู้ใช้
+    # อัพเดทข้อมูลผู้ใช้
     user = db.query(User).filter(User.email == current_user.email).first()
     if user:
-        # สร้างที่อยู่แบบเต็ม
-        full_address = f"{address}, {province} {postal_code}"
         user.name = fullname
         user.phone = phone
-        user.address = full_address
+        
+        # สร้างหรืออัพเดทที่อยู่
+        from app.models.address import Address
+        address = db.query(Address).filter(Address.user_id == user.id).first()
+        if not address:
+            address = Address(user_id=user.id)
+            db.add(address)
+        
+        # อัพเดทข้อมูลที่อยู่
+        address.house_number = house_number
+        address.village_no = village_no
+        address.subdistrict = subdistrict
+        address.district = district
+        address.province = province
+        address.postal_code = postal_code
+        
         db.commit()
 
     # บันทึกไฟล์สลิปการโอนเงิน
@@ -181,19 +208,32 @@ async def checkout(
     with open(slip_path, "wb") as buffer:
         buffer.write(await payment_slip.read())
 
-    # บันทึก JSON ด้วย double quotes
-    cart_json = json.dumps(cart_data['cart'], ensure_ascii=False)
-
     # สร้างรายการออเดอร์ใหม่
     new_order = Order(
-        email=current_user.email,
-        item=cart_json,
+        user_id=current_user.id,
         total=cart_data['cart_total'],
         status="pending",
-        slip_path=slip_path
+        slip_path=slip_path,
+        created_at=datetime.utcnow()
     )
 
+    # เพิ่ม order ลงฐานข้อมูลก่อนเพื่อให้ได้ order_id
     db.add(new_order)
+    db.flush()  # ใช้ flush เพื่อให้ได้ order_id โดยไม่ต้อง commit
+
+    # สร้าง order items
+    from app.models.order_item import OrderItem
+    for item in cart_data['cart']:
+        order_item = OrderItem(
+            order_id=new_order.order_id,
+            product_id=item['product_id'],
+            quantity=item['quantity'],
+            price_at_order=item['price'],
+            total_item_price=item['total']
+        )
+        db.add(order_item)
+
+    # บันทึกทั้งหมดลงฐานข้อมูล
     db.commit()
     db.refresh(new_order)
 

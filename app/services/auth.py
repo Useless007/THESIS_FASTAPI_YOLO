@@ -257,27 +257,15 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
         if email is None:
             raise HTTPException(status_code=401, detail="Invalid token payload: 'sub' not found")
 
-        # ✅ ดึง User จากฐานข้อมูล - ไม่อ้างอิง role และ position เป็น relationship ตรง ๆ
+        # ✅ ดึง User จากฐานข้อมูลพร้อม relationship
         user = db.query(User).filter(User.email == email).first()
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
-
-        # ✅ กำหนดค่า role และ position จาก role_id และ position_id
-        # ต้องใช้ model Role และ Position เพื่อดึงค่าจริงจากตาราง
-        from app.models.role import Role
-        from app.models.position import Position
         
-        role_obj = db.query(Role).filter(Role.role_id == user.role_id).first()
-        position_obj = None
-        if user.position_id:
-            position_obj = db.query(Position).filter(Position.position_id == user.position_id).first()
-        
-        # เพิ่ม property ให้ user object เพื่อให้มี role และ position ที่เข้าถึงง่าย
-        user.role = role_obj.role_name if role_obj else None
-        user.position = position_obj.position_name if position_obj else None
-
-        print(f"✅ Authenticated User: {user.email}, Role: {user.role}, Position: {user.position}")
-        return user  # ✅ คืนค่าเป็น Object ของ User
+        # ส่งกลับ user object โดยตรง ไม่ต้องเพิ่ม property
+        # SQLAlchemy จะจัดการ relationship ให้เอง
+        print(f"✅ Authenticated User: {user.email}")
+        return user
 
     except jwt.ExpiredSignatureError:
         print("❌ Token has expired")
@@ -285,7 +273,6 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
     except jwt.InvalidTokenError as e:
         print(f"❌ Invalid Token: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
-
 
 
 # # ฟังก์ชันสำหรับตรวจสอบบทบาทของผู้ใช้
@@ -344,7 +331,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
 
 def get_user_with_role(required_role: str):
     def role_checker(current_user: User = Depends(get_current_user)):
-        if not current_user or current_user.role != required_role:
+        if not current_user or current_user.role_id != required_role:
             raise HTTPException(
                 status_code=403,
                 detail=f"Permission denied: Requires {required_role} role"
@@ -357,12 +344,12 @@ def get_user_with_role_and_position(required_role: str, required_position: str):
         if not current_user:
             raise HTTPException(status_code=401, detail="User authentication failed")
         
-        if current_user.role != required_role:
+        if current_user.role_id != required_role:
             raise HTTPException(
                 status_code=403,
                 detail=f"Permission denied: Requires {required_role} role"
             )
-        if current_user.position != required_position:
+        if current_user.position_id != required_position:
             raise HTTPException(
                 status_code=403,
                 detail=f"Permission denied: Requires {required_position} position"
@@ -378,12 +365,15 @@ def get_user_with_role_and_position_and_isActive(required_role: str, required_po
                 detail="User authentication failed"
             )
 
-        if current_user.role != required_role:
+        print(f"🔑 Current User: {current_user}")
+
+        if current_user.role_id != required_role:
             raise HTTPException(
                 status_code=403,
                 detail=f"Permission denied: Requires {required_role} role"
             )
-        if current_user.position != required_position:
+
+        if current_user.position_id != required_position:
             raise HTTPException(
                 status_code=403,
                 detail=f"Permission denied: Requires {required_position} position"

@@ -7,7 +7,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdn.jsdelivr.net/npm/flowbite@2.2.1/dist/flowbite.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
 </head>
 <body class="bg-gray-100">
   <!-- Navbar -->
@@ -80,7 +79,6 @@
             <p class="text-sm text-gray-500">อัตราการเติบโต</p>
             <h3 id="growthRate" class="text-2xl font-bold">0%</h3>
           </div>
-          <!-- หากต้องการเพิ่มเปอร์เซ็นต์เพิ่มเติมให้ปรับได้ที่นี่ -->
         </div>
       </div>
     </div>
@@ -145,12 +143,18 @@
   </div>
 
   <script>
+    let salesChart = null;
+    let topProductsChart = null;
+
     // ฟังก์ชันโหลดข้อมูล Dashboard
     async function loadDashboardData(period = 'today') {
       try {
+        const authCookie = document.cookie.split('; ').find(row => row.startsWith('Authorization='));
+        const token = authCookie ? authCookie.split('=')[1] : '';
+        
         const response = await fetch(`/admin/api/executive/dashboard-data?period=${period}`, {
           headers: {
-            'Authorization': `Bearer ${document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1]}`
+            'Authorization': `Bearer ${token}`
           }
         });
         const data = await response.json();
@@ -169,9 +173,18 @@
       document.getElementById('growthRate').textContent = `${data.growth_rate}%`;
 
       // อัพเดทเปอร์เซ็นต์เปลี่ยนแปลงจริง
-      document.getElementById('totalSalesChange').textContent = `${data.sales_change >= 0 ? '+' : ''}${data.sales_change}%`;
-      document.getElementById('totalOrdersChange').textContent = `${data.orders_change >= 0 ? '+' : ''}${data.orders_change}%`;
-      document.getElementById('newCustomersChange').textContent = `${data.customers_change >= 0 ? '+' : ''}${data.customers_change}%`;
+      const salesChange = document.getElementById('totalSalesChange');
+      const ordersChange = document.getElementById('totalOrdersChange');
+      const customersChange = document.getElementById('newCustomersChange');
+      
+      salesChange.textContent = `${data.sales_change >= 0 ? '+' : ''}${data.sales_change}%`;
+      salesChange.className = data.sales_change >= 0 ? 'text-green-500 text-sm' : 'text-red-500 text-sm';
+      
+      ordersChange.textContent = `${data.orders_change >= 0 ? '+' : ''}${data.orders_change}%`;
+      ordersChange.className = data.orders_change >= 0 ? 'text-green-500 text-sm' : 'text-red-500 text-sm';
+      
+      customersChange.textContent = `${data.customers_change >= 0 ? '+' : ''}${data.customers_change}%`;
+      customersChange.className = data.customers_change >= 0 ? 'text-green-500 text-sm' : 'text-red-500 text-sm';
 
       // สร้างกราฟยอดขาย
       createSalesChart(data.daily_sales);
@@ -185,7 +198,13 @@
     // สร้างกราฟยอดขาย
     function createSalesChart(data) {
       const ctx = document.getElementById('salesChart').getContext('2d');
-      new Chart(ctx, {
+      
+      // ทำลายกราฟเก่าถ้ามี
+      if (salesChart) {
+        salesChart.destroy();
+      }
+      
+      salesChart = new Chart(ctx, {
         type: 'line',
         data: {
           labels: data.map(d => d.date),
@@ -193,7 +212,9 @@
             label: 'ยอดขาย',
             data: data.map(d => d.amount),
             borderColor: 'rgb(59, 130, 246)',
-            tension: 0.1
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: true,
+            tension: 0.4
           }]
         },
         options: {
@@ -201,6 +222,16 @@
           plugins: {
             legend: {
               position: 'top',
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return '฿' + value.toLocaleString();
+                }
+              }
             }
           }
         }
@@ -210,14 +241,22 @@
     // สร้างกราฟสินค้าขายดี
     function createTopProductsChart(data) {
       const ctx = document.getElementById('topProductsChart').getContext('2d');
-      new Chart(ctx, {
+      
+      // ทำลายกราฟเก่าถ้ามี
+      if (topProductsChart) {
+        topProductsChart.destroy();
+      }
+      
+      topProductsChart = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: data.map(d => d.name),
           datasets: [{
             label: 'จำนวนที่ขายได้',
             data: data.map(d => d.quantity),
-            backgroundColor: 'rgb(59, 130, 246)'
+            backgroundColor: 'rgb(59, 130, 246)',
+            borderColor: 'rgb(59, 130, 246)',
+            borderWidth: 1
           }]
         },
         options: {
@@ -225,6 +264,14 @@
           plugins: {
             legend: {
               position: 'top',
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                stepSize: 1
+              }
             }
           }
         }
@@ -236,12 +283,12 @@
       const tbody = document.getElementById('recentOrders');
       tbody.innerHTML = orders.map(order => `
         <tr class="border-b">
-          <td class="py-2">${order.id}</td>
+          <td class="py-2">#${order.id}</td>
           <td class="py-2">${order.customer}</td>
           <td class="py-2">฿${order.total.toLocaleString()}</td>
           <td class="py-2">
             <span class="px-2 py-1 rounded-full text-xs ${getStatusColor(order.status)}">
-              ${order.status}
+              ${getStatusText(order.status)}
             </span>
           </td>
         </tr>
@@ -256,7 +303,7 @@
           <td class="py-2">${s.name}</td>
           <td class="py-2">${s.orders_handled}</td>
           <td class="py-2">${s.avg_time} นาที</td>
-          <td class="py-2">${s.rating}/5</td>
+          <td class="py-2">⭐ ${s.rating}/5</td>
         </tr>
       `).join('');
     }
@@ -270,6 +317,17 @@
         'cancelled': 'bg-red-100 text-red-800'
       };
       return colors[status] || 'bg-gray-100 text-gray-800';
+    }
+
+    // ฟังก์ชันแปลงสถานะเป็นภาษาไทย
+    function getStatusText(status) {
+      const statusText = {
+        'pending': 'รอดำเนินการ',
+        'processing': 'กำลังดำเนินการ',
+        'completed': 'เสร็จสิ้น',
+        'cancelled': 'ยกเลิก'
+      };
+      return statusText[status] || status;
     }
 
     // Event Listener สำหรับ date filter

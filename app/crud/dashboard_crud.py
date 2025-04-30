@@ -2,7 +2,7 @@
 
 import json
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.order import Order
 from app.models.user import User
 
@@ -21,8 +21,11 @@ def get_executive_dashboard_data(db: Session, period: str):
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
     end_date = now
 
-    # ดึงออเดอร์ในช่วงเวลาที่กำหนด
-    orders = db.query(Order).filter(Order.created_at >= start_date, Order.created_at <= end_date).all()
+    # ดึงออเดอร์ในช่วงเวลาที่กำหนด พร้อมโหลด user relationship
+    orders = db.query(Order)\
+        .options(joinedload(Order.user))\
+        .filter(Order.created_at >= start_date, Order.created_at <= end_date)\
+        .all()
 
     # จำนวนออเดอร์ทั้งหมดในช่วงเวลา
     total_orders = len(orders)
@@ -30,10 +33,10 @@ def get_executive_dashboard_data(db: Session, period: str):
     # ยอดขายรวม (เฉพาะออเดอร์ที่ completed)
     total_sales = sum(order.total for order in orders if order.status == "completed")
 
-    # จำนวนลูกค้าใหม่ (สมมติว่ามี attribute created_at ใน User)
+    # จำนวนลูกค้าใหม่ (แก้ไขให้ใช้ role_id แทน role string)
     try:
         new_customers = db.query(User).filter(
-            User.role == "customer",
+            User.role_id == 2,  # 2 = customer
             User.created_at >= start_date,
             User.created_at <= end_date
         ).count()
@@ -45,15 +48,15 @@ def get_executive_dashboard_data(db: Session, period: str):
     previous_start = start_date - period_delta
     previous_end = start_date
 
-    previous_orders_all = db.query(Order).filter(
-        Order.created_at >= previous_start,
-        Order.created_at < previous_end
-    ).all()
+    previous_orders_all = db.query(Order)\
+        .filter(Order.created_at >= previous_start, Order.created_at < previous_end)\
+        .all()
     previous_total_sales = sum(order.total for order in previous_orders_all if order.status == "completed")
     previous_total_orders = len(previous_orders_all)
+    
     try:
         previous_new_customers = db.query(User).filter(
-            User.role == "customer",
+            User.role_id == 2,  # 2 = customer
             User.created_at >= previous_start,
             User.created_at <= previous_end
         ).count()
@@ -75,31 +78,32 @@ def get_executive_dashboard_data(db: Session, period: str):
         daily_sales_dict[order_date] = daily_sales_dict.get(order_date, 0) + order.total
     daily_sales = [{"date": date, "amount": amount} for date, amount in sorted(daily_sales_dict.items())]
 
-    # สินค้าขายดี: สมมติว่า order.item เป็น JSON string ของรายการสินค้า
+    # สินค้าขายดี: ใช้ order_items relationship แทน
     product_sales = {}
     for order in orders:
-        try:
-            items = json.loads(order.item) if order.item else []
-            for item in items:
-                name = item.get("name", "Unknown")
-                quantity = item.get("quantity", 0)
-                product_sales[name] = product_sales.get(name, 0) + quantity
-        except Exception:
-            continue
+        if hasattr(order, 'order_items'):
+            for item in order.order_items:
+                product_name = item.product.name if item.product else "Unknown"
+                product_sales[product_name] = product_sales.get(product_name, 0) + item.quantity
+    
     top_products = [
         {"name": name, "quantity": quantity}
         for name, quantity in sorted(product_sales.items(), key=lambda x: x[1], reverse=True)
     ][:5]
 
     # ออเดอร์ล่าสุด (จำกัด 5 รายการ)
-    recent_orders_query = db.query(Order).filter(
-        Order.created_at >= start_date, Order.created_at <= end_date
-    ).order_by(Order.created_at.desc()).limit(5).all()
+    recent_orders_query = db.query(Order)\
+        .options(joinedload(Order.user))\
+        .filter(Order.created_at >= start_date, Order.created_at <= end_date)\
+        .order_by(Order.created_at.desc())\
+        .limit(5)\
+        .all()
+    
     recent_orders = []
     for order in recent_orders_query:
         recent_orders.append({
             "id": order.order_id,
-            "customer": order.email,
+            "customer": order.user.email if order.user else "Unknown",  # แก้ไขตรงนี้
             "total": order.total,
             "status": order.status
         })
@@ -109,10 +113,10 @@ def get_executive_dashboard_data(db: Session, period: str):
     for order in orders:
         if order.assigned_to:
             staff_dict.setdefault(order.assigned_to, []).append(order)
+    
     staff_performance = []
     for staff_id, orders_list in staff_dict.items():
         staff_user = db.query(User).filter(User.id == staff_id).first()
-        # เนื่องจาก model User ไม่มี attribute 'name' ให้ใช้ email แทน
         staff_name = staff_user.email if staff_user else "Unknown"
         orders_handled = len(orders_list)
         avg_time = 0  # หากมีข้อมูลเวลาในการประมวลผลให้คำนวณจริง

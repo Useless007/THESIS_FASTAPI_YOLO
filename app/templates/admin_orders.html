@@ -74,79 +74,77 @@
         let selectedOrderId = null; // เก็บ ID ของออเดอร์ที่ถูกเลือก
 
         // ดึงข้อมูลคำสั่งซื้อพร้อมสลิป
-        $(document).ready(function () {
-            $.getJSON("/admin/pending_order", function (data) {
+        $(document).ready(function() {
+            $.getJSON("/admin/pending_order", function(data) {
                 var orderList = $("#order-list");
                 orderList.empty(); // ล้างรายการเก่า
-
-                data.orders.forEach(function (order) {
+        
+                data.orders.forEach(function(order) {
                     let items = Array.isArray(order.item) ? order.item : [];
-
+        
                     let itemList = items.map(item => {
                         if (item.error) {
                             return `<span class="text-red-500">❌ ${item.error}</span>`;
                         }
-                        return `${item.name} (x${item.quantity})`;
+                        // แก้จาก item.name เป็น item.product_name
+                        return `${item.product_name} (x${item.quantity})`;
                     }).join(', ');
-
+        
                     var listItem = `
-                <li data-id="${order.id}">
-                    <div class="block hover:bg-gray-50">
-                        <div class="px-4 py-4 sm:px-6">
-                            <div class="flex items-center justify-between">
-                                <div class="truncate text-sm font-medium text-indigo-600">
-                                    อีเมล: ${order.email}
+                        <li data-id="${order.id}">
+                            <div class="block hover:bg-gray-50">
+                                <div class="px-4 py-4 sm:px-6">
+                                    <div class="flex items-center justify-between">
+                                        <div class="truncate text-sm font-medium text-indigo-600">
+                                            อีเมล: ${order.email}
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 flex justify-between">
+                                        <div class="text-sm text-gray-500">
+                                            สินค้า: ${itemList}
+                                        </div>
+                                        <button onclick="openModal(
+                                            ${order.id}, 
+                                            '${order.email}', 
+                                            '${encodeURIComponent(JSON.stringify(items))}', 
+                                            ${order.total}, 
+                                            '${order.created_at}', 
+                                            '${order.slip_path || ''}'
+                                        )" class="bg-blue-200 rounded p-2">🔍 ดูรายละเอียด</button>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="mt-2 flex justify-between">
-                                <div class="text-sm text-gray-500">
-                                    สินค้า: ${itemList}
-                                </div>
-                                <button onclick="openModal(
-                                    ${order.id}, 
-                                    '${order.email}', 
-                                    '${encodeURIComponent(JSON.stringify(items))}', 
-                                    ${order.total}, 
-                                    '${order.created_at}', 
-                                    '${order.slip_path || ''}'
-                                )" class="bg-blue-200 rounded p-2">🔍 ดูรายละเอียด</button>
-                            </div>
-                        </div>
-                    </div>
-                </li>
-            `;
+                        </li>
+                    `;
                     orderList.append(listItem);
                 });
             });
         });
-
-
+        
         // เปิด Modal พร้อมแสดงสลิป
         function openModal(orderId, email, item, total, created_at, slipPath) {
             selectedOrderId = orderId; // บันทึก ID ของออเดอร์ที่เลือก
-
+        
             let parsedItems = JSON.parse(decodeURIComponent(item));
-            let itemList = parsedItems.map(item => `📌 ${item.name} (x${item.quantity})`).join('<br>');
-
+            // แก้จาก item.name เป็น item.product_name ในส่วนนี้ด้วย
+            let itemList = parsedItems.map(item => `📌 ${item.product_name} (x${item.quantity})`).join('<br>');
+        
             $('#modal-email').text(email);
             $('#modal-item').html(itemList); // ใช้ .html() แทน .text() เพื่อรองรับ <br>
             $('#modal-total').text(total);
             $('#modal-created').text(created_at);
-
-
-
-
+        
             if (slipPath) {
                 $('#modal-slip').attr('src', slipPath).show();
-
+        
                 // เพิ่ม Event Listener สำหรับคลิกที่รูป
-                $('#modal-slip').off('click').on('click', function () {
+                $('#modal-slip').off('click').on('click', function() {
                     openFullscreenModal(slipPath);
                 });
             } else {
                 $('#modal-slip').attr('src', '').hide();
             }
-
+        
             $('#orderModal').removeClass('hidden');
         }
 

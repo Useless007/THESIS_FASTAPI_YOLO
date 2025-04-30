@@ -46,16 +46,19 @@
                             <td class="py-2 px-4 border-b">${user.name}</td>
                             <td class="py-2 px-4 border-b">
                                 <select onchange="updateRole(${user.id}, this.value)">
-                                    <option value="customer" ${user.role === "customer" ? "selected" : ""}>Customer</option>
-                                    <option value="employee" ${user.role === "employee" ? "selected" : ""}>Employee</option>
+                                    <option value="2" ${user.role?.role_id === 2 ? "selected" : ""}>Customer</option>
+                                    <option value="1" ${user.role?.role_id === 1 ? "selected" : ""}>Employee</option>
                                 </select>
                             </td>
                             <td class="py-2 px-4 border-b">
-                                <select onchange="updatePosition(${user.id}, this.value)">
-                                    <option value="admin" ${user.position === "admin" ? "selected" : ""}>Admin</option>
-                                    <option value="preparation staff" ${user.position === "preparation staff" ? "selected" : ""}>Preparation Staff</option>
-                                    <option value="packing staff" ${user.position === "packing staff" ? "selected" : ""}>Packing Staff</option>
-                                </select>
+                                ${user.position ? `
+                                    <select onchange="updatePosition(${user.id}, this.value)">
+                                        <option value="1" ${user.position.position_id === 1 ? "selected" : ""}>Executive</option>
+                                        <option value="2" ${user.position.position_id === 2 ? "selected" : ""}>Admin</option>
+                                        <option value="3" ${user.position.position_id === 3 ? "selected" : ""}>Preparation Staff</option>
+                                        <option value="4" ${user.position.position_id === 4 ? "selected" : ""}>Packing Staff</option>
+                                    </select>
+                                ` : 'ไม่มีตำแหน่ง'}
                             </td>
                             <td class="py-2 px-4 border-b">
                                 <button onclick="deleteRole(${user.id})" class="bg-red-500 text-white px-2 py-1 rounded">ลบ</button>
@@ -63,9 +66,12 @@
                         </tr>`;
                 });
                 $("#roles-list").html(rolesList);
+            }).fail(function(error) {
+                console.error("Error fetching roles:", error);
+                alert("❌ ไม่สามารถโหลดข้อมูลผู้ใช้ได้");
             });
         }
-
+    
         function updateRole(userId, newRole) {
             $.ajax({
                 url: `/admin/users/${userId}/update-role`,
@@ -81,7 +87,7 @@
                 }
             });
         }
-
+    
         function updatePosition(userId, newPosition) {
             $.ajax({
                 url: `/admin/users/${userId}/update-position`,
@@ -97,7 +103,7 @@
                 }
             });
         }
-
+    
         function deleteRole(userId) {
             if (confirm("⚠️ ต้องการลบผู้ใช้นี้จริงหรือไม่?")) {
                 $.ajax({
@@ -113,7 +119,7 @@
                 });
             }
         }
-
+    
         $(document).ready(function () {
             fetchRoles();
         });

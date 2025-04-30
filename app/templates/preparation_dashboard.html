@@ -111,7 +111,7 @@
                     const itemsList = document.getElementById('modal-order-items');
                     itemsList.innerHTML = '';
                     data.items.forEach(item => {
-                        itemsList.innerHTML += `<li>${item.name} (x${item.quantity}) - ฿${item.price}</li>`;
+                        itemsList.innerHTML += `<li>${item.product_name} (x${item.quantity}) - ฿${item.price}</li>`;
                     });
 
                     document.getElementById('orderDetailsModal').classList.remove('hidden');

@@ -106,29 +106,35 @@
         })
             .then(response => response.json())
             .then(data => {
-                // console.log("🛡️ Role Check Response:", data);
+                console.log("🛡️ Role Check Response:", data);
 
                 // ตรวจสอบเงื่อนไขบทบาท
                 if (
                     data.status === 'success' &&
-                    data.role === 'employee' &&
+                    data.role.role_name === 'employee' &&
                     data.is_active === true
                 ) {
 
-                    if (data.position === 'packing staff') {
+                    if (data.position.position_name === 'packing') {
                         document.getElementById('packing-dashboard').classList.remove('hidden');
-                        // console.log('✅ Packing Dashboard Visible');
-                    } else if (data.position === 'preparation staff') {
+                        console.log('✅ Packing Dashboard Visible');
+                    } else if (data.position.position_name === 'preparation') {
                         document.getElementById('preparation-dashboard').classList.remove('hidden');
-                        // console.log('✅ Preparation Dashboard Visible');
-                    } else if (data.position === 'admin' || data.position === 'executive') {
+                        console.log('✅ Preparation Dashboard Visible');
+                    } else if (data.position.position_name === 'admin') {
                         document.getElementById('admin-dashboard').classList.remove('hidden');
-                        // console.log('✅ Admin Dashboard Visible');
+                        console.log('✅ Admin Dashboard Visible');
+                    } else if (data.position.position_name === 'executive') {
+                        document.getElementById('executive-dashboard').classList.remove('hidden');
+                        console.log('✅ Executive Dashboard Visible');
                     }
 
                 } else {
+                    document.getElementById('executive-dashboard').classList.add('hidden');
                     document.getElementById('admin-dashboard').classList.add('hidden');
-                    // console.log('❌ Admin Dashboard Hidden');
+                    document.getElementById('preparation-dashboard').classList.add('hidden');
+                    document.getElementById('packing-dashboard').classList.add('hidden');
+                    console.log('❌ Admin Dashboard Hidden');
                 }
             })
             .catch(error => console.error('❌ Error:', error));
@@ -174,6 +180,12 @@
                             class="block text-sm  text-gray-500 truncate dark:text-gray-400">email@domain.com</span>
                     </div>
                     <ul class="py-2" aria-labelledby="user-menu-button">
+                        <li id="executive-dashboard" class="hidden">
+                            <a href="/admin/dashboard"
+                                class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-200 dark:hover:text-white">
+                                แดชบอร์ดผู้บริหาร
+                            </a>
+                        </li>
                         <li id="admin-dashboard" class="hidden">
                             <a href="/admin/dashboard"
                                 class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 dark:text-gray-200 dark:hover:text-white">

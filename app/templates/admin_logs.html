@@ -7,6 +7,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <title>Work Status Logs</title>
+    <style>
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .status-pending { background-color: #FEF3C7; color: #92400E; }
+        .status-confirmed { background-color: #DBEAFE; color: #1E40AF; }
+        .status-packing { background-color: #E9D5FF; color: #6B21A8; }
+        .status-completed { background-color: #D1FAE5; color: #065F46; }
+    </style>
 </head>
 
 <body class="bg-gray-100">
@@ -18,30 +31,68 @@
     </nav>
 
     <main class="p-8">
-        <div class="mx-auto max-w-4xl">
-            <h1 class="text-3xl font-bold text-center">ตรวจสอบสถานะการทำงานรายวัน</h1>
-            <div class="flex justify-center my-4">
-                <input type="date" id="date-picker" class="p-2 border rounded-md" />
+        <div class="mx-auto max-w-6xl">
+            <h1 class="text-3xl font-bold text-center mb-8">ตรวจสอบสถานะการทำงานรายวัน</h1>
+            
+            <div class="flex justify-center mb-8">
+                <input type="date" id="date-picker" class="p-2 border rounded-md shadow-sm" />
                 <button onclick="fetchWorkStatus()"
-                    class="bg-blue-500 text-white px-4 py-2 rounded-md ml-2">ค้นหา</button>
+                    class="bg-blue-500 text-white px-4 py-2 rounded-md ml-2 hover:bg-blue-600 transition-colors">
+                    🔍 ค้นหา
+                </button>
             </div>
-            <table class="min-w-full bg-white shadow-md rounded-lg mt-6">
-                <thead>
-                    <tr>
-                        <th class="py-2 px-4 border-b">โต๊ะ</th>
-                        <th class="py-2 px-4 border-b">พนักงาน</th>
-                        <th class="py-2 px-4 border-b">สถานะ</th>
-                        <th class="py-2 px-4 border-b">เวลาทำงาน</th>
-                    </tr>
-                </thead>
-                <tbody id="status-list">
-                    <!-- ข้อมูลโหลดจาก API -->
-                </tbody>
-            </table>
+
+            <!-- Summary Cards -->
+            <div id="summary-cards" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 hidden">
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-sm font-medium text-gray-500">Total Orders</h3>
+                    <p id="total-orders" class="text-2xl font-bold mt-2">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-sm font-medium text-gray-500">Pending</h3>
+                    <p id="pending-orders" class="text-2xl font-bold mt-2 text-yellow-600">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-sm font-medium text-gray-500">In Progress</h3>
+                    <p id="progress-orders" class="text-2xl font-bold mt-2 text-blue-600">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow">
+                    <h3 class="text-sm font-medium text-gray-500">Completed</h3>
+                    <p id="completed-orders" class="text-2xl font-bold mt-2 text-green-600">0</p>
+                </div>
+            </div>
+            
+            <div class="bg-white shadow-md rounded-lg overflow-hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">กล้อง</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">พนักงาน</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ลูกค้า</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">เวลา</th>
+                        </tr>
+                    </thead>
+                    <tbody id="status-list" class="bg-white divide-y divide-gray-200">
+                        <!-- ข้อมูลโหลดจาก API -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div id="no-data" class="text-center mt-8 text-gray-500 hidden">
+                ไม่พบข้อมูลสำหรับวันที่เลือก
+            </div>
         </div>
     </main>
 
     <script>
+        $(document).ready(function() {
+            const today = new Date().toISOString().split('T')[0];
+            $("#date-picker").val(today);
+            fetchWorkStatus();
+        });
+
         function fetchWorkStatus() {
             let selectedDate = $("#date-picker").val();
             if (!selectedDate) {
@@ -49,20 +100,76 @@
                 return;
             }
 
+            $("#status-list").html(`
+                <tr>
+                    <td colspan="6" class="text-center py-4">
+                        <div class="animate-pulse">กำลังโหลดข้อมูล...</div>
+                    </td>
+                </tr>
+            `);
+
             $.getJSON(`/admin/work-status?date=${selectedDate}`, function (data) {
                 let statusList = "";
+                
+                if (data.work_status.length === 0) {
+                    $("#status-list").html("");
+                    $("#no-data").removeClass("hidden");
+                    $("#summary-cards").addClass("hidden");
+                    return;
+                } else {
+                    $("#no-data").addClass("hidden");
+                    $("#summary-cards").removeClass("hidden");
+                }
+
+                // Update summary cards
+                let totalOrders = data.work_status.length;
+                let pendingOrders = data.work_status.filter(order => order.status === 'pending').length;
+                let progressOrders = data.work_status.filter(order => order.status === 'confirmed' || order.status === 'packing').length;
+                let completedOrders = data.work_status.filter(order => order.status === 'completed').length;
+                
+                $("#total-orders").text(totalOrders);
+                $("#pending-orders").text(pendingOrders);
+                $("#progress-orders").text(progressOrders);
+                $("#completed-orders").text(completedOrders);
+
                 data.work_status.forEach(status => {
+                    let statusBadge = '';
+                    switch(status.status) {
+                        case 'pending':
+                            statusBadge = '<span class="status-badge status-pending">pending</span>';
+                            break;
+                        case 'confirmed':
+                            statusBadge = '<span class="status-badge status-confirmed">confirmed</span>';
+                            break;
+                        case 'packing':
+                            statusBadge = '<span class="status-badge status-packing">packing</span>';
+                            break;
+                        case 'completed':
+                            statusBadge = '<span class="status-badge status-completed">completed</span>';
+                            break;
+                        default:
+                            statusBadge = `<span class="status-badge">${status.status}</span>`;
+                    }
+
                     statusList += `
-                        <tr>
-                            <td class="py-2 px-4 border-b">${status.table_number}</td>
-                            <td class="py-2 px-4 border-b">${status.employee_name}</td>
-                            <td class="py-2 px-4 border-b">${status.status}</td>
-                            <td class="py-2 px-4 border-b">${status.created_at}</td>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">#${status.order_id}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${status.camera_name}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${status.employee_name}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${status.customer_email || '-'}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm">${statusBadge}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${status.created_at}</td>
                         </tr>`;
                 });
                 $("#status-list").html(statusList);
             }).fail(function () {
-                alert("❌ ไม่สามารถโหลดข้อมูลได้");
+                $("#status-list").html(`
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-red-500">
+                            ❌ ไม่สามารถโหลดข้อมูลได้
+                        </td>
+                    </tr>
+                `);
             });
         }
     </script>
