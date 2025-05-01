@@ -13,6 +13,11 @@
         .video-container {
             position: relative;
             display: inline-block;
+            border: 3px solid #3498db; /* เพิ่มกรอบสีฟ้า */
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            margin-bottom: 15px;
         }
 
         /* สไตล์สำหรับภาพ stream */
@@ -157,6 +162,46 @@
             gap: 10px;
             margin-top: 10px;
         }
+
+        /* สไตล์สำหรับ toggle switch */
+        .toggle-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 10px 0;
+        }
+
+        .toggle-wrapper label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+
+        /* พื้นที่แสดงสถานะการโหลดโมเดล */
+        .model-status {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+            display: none;
+        }
+
+        .model-status.loading {
+            background-color: #fff3cd;
+            color: #856404;
+            display: block;
+        }
+
+        .model-status.success {
+            background-color: #d4edda;
+            color: #155724;
+            display: block;
+        }
+
+        .model-status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
     </style>
 
     <script>
@@ -199,7 +244,115 @@
             loadCameraList();
             loadPackingOrders();
             loadCurrentOrder();  // โหลดออเดอร์ที่รับอยู่
+
+            // แสดงกรอบของ video container ตั้งแต่โหลดหน้า
+            const videoContainer = document.querySelector('.video-container');
+            if (videoContainer) {
+                videoContainer.style.display = 'inline-block';
+            }
+
+            // ตั้งค่า toggle switches
+            setupToggleSwitches();
         });
+
+        // ฟังก์ชั่นตั้งค่า toggle switches
+        function setupToggleSwitches() {
+            // ติดตั้ง event listener สำหรับ switch การตรวจจับแบบ realtime
+            const detectSwitch = document.getElementById('realtime-detection-switch');
+            if (detectSwitch) {
+                detectSwitch.addEventListener('change', function () {
+                    if (this.checked) {
+                        // เปิดการตรวจจับ realtime
+                        startRealtimeDetection();
+                    } else {
+                        // ปิดการตรวจจับ realtime
+                        stopRealtimeDetection();
+                    }
+                });
+            }
+        }
+
+        // เริ่มการตรวจจับแบบ realtime
+        function startRealtimeDetection() {
+            if (!window.yoloDetector) {
+                document.getElementById('model-status').textContent = 'กำลังโหลดโมเดล...';
+                document.getElementById('model-status').className = 'model-status loading';
+
+                // ตรวจสอบว่า yoloDetector object มีอยู่จริงหรือไม่
+                if (typeof YOLODetector === 'undefined') {
+                    document.getElementById('model-status').textContent = 'ไม่พบ YOLODetector object โปรดโหลดโมเดลก่อน';
+                    document.getElementById('model-status').className = 'model-status error';
+                    document.getElementById('realtime-detection-switch').checked = false;
+                    return;
+                }
+
+                // สร้าง YOLODetector instance ใหม่
+                window.yoloDetector = new YOLODetector();
+                const videoElement = document.getElementById('camera-stream');
+                const canvasElement = document.getElementById('detection-overlay');
+
+                window.yoloDetector.initialize(videoElement, canvasElement)
+                    .then(initialized => {
+                        if (initialized) {
+                            window.yoloDetector.start();
+                            document.getElementById('model-status').textContent = 'โมเดลทำงานพร้อมใช้งาน';
+                            document.getElementById('model-status').className = 'model-status success';
+                        } else {
+                            document.getElementById('model-status').textContent = 'ไม่สามารถโหลดโมเดลได้';
+                            document.getElementById('model-status').className = 'model-status error';
+                            document.getElementById('realtime-detection-switch').checked = false;
+                        }
+                    });
+            } else {
+                // ถ้ามี yoloDetector อยู่แล้ว ให้เริ่มตรวจจับใหม่
+                window.yoloDetector.start();
+                document.getElementById('model-status').textContent = 'กำลังตรวจจับอัตโนมัติ';
+                document.getElementById('model-status').className = 'model-status success';
+            }
+        }
+
+        // หยุดการตรวจจับแบบ realtime
+        function stopRealtimeDetection() {
+            if (window.yoloDetector) {
+                window.yoloDetector.stop();
+                document.getElementById('model-status').textContent = 'หยุดการตรวจจับอัตโนมัติแล้ว';
+                document.getElementById('model-status').className = 'model-status';
+            }
+        }
+
+        // โหลดโมเดล ONNX แยกต่างหาก
+        async function loadONNXModel() {
+            document.getElementById('load-model-btn').disabled = true;
+            document.getElementById('model-status').textContent = 'กำลังโหลดโมเดล ONNX...';
+            document.getElementById('model-status').className = 'model-status loading';
+
+            try {
+                if (!window.yoloDetector) {
+                    window.yoloDetector = new YOLODetector();
+                    const videoElement = document.getElementById('camera-stream');
+                    const canvasElement = document.getElementById('detection-overlay');
+
+                    const initialized = await window.yoloDetector.initialize(videoElement, canvasElement);
+
+                    if (initialized) {
+                        document.getElementById('model-status').textContent = 'โหลดโมเดล ONNX สำเร็จแล้ว พร้อมใช้งาน';
+                        document.getElementById('model-status').className = 'model-status success';
+                        document.getElementById('load-model-btn').textContent = 'โหลดโมเดลใหม่';
+                    } else {
+                        throw new Error('ไม่สามารถโหลดโมเดลได้');
+                    }
+                } else {
+                    document.getElementById('model-status').textContent = 'โมเดลถูกโหลดไว้แล้ว';
+                    document.getElementById('model-status').className = 'model-status success';
+                }
+            } catch (error) {
+                console.error('Error loading ONNX model:', error);
+                document.getElementById('model-status').textContent = 'เกิดข้อผิดพลาดในการโหลดโมเดล: ' + error.message;
+                document.getElementById('model-status').className = 'model-status error';
+            } finally {
+                document.getElementById('load-model-btn').disabled = false;
+            }
+        }
 
     </script>
 
@@ -228,12 +381,37 @@
 
         <h2 class="text-2xl font-bold mb-6">🔍 ตรวจจับสินค้าในภาพด้วย YOLOv10 ผ่านกล้อง</h2>
 
+        <!-- Control panel สำหรับโมเดล ONNX -->
+        <div class="mb-4 p-4 bg-white rounded-lg shadow-md">
+            <h3 class="font-bold text-lg mb-2">🧠 ควบคุมการทำงานของ AI</h3>
+
+            <!-- ปุ่มโหลดโมเดล ONNX -->
+            <button id="load-model-btn" onclick="loadONNXModel()" 
+                class="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 mb-3">
+                🧠 โหลดโมเดล ONNX
+            </button>
+
+            <!-- สถานะการโหลดโมเดล -->
+            <div id="model-status" class="model-status">
+                ยังไม่ได้โหลดโมเดล
+            </div>
+
+            <!-- Toggle switch สำหรับเปิด/ปิดการตรวจจับแบบ realtime -->
+            <div class="toggle-wrapper mt-3">
+                <label for="realtime-detection-switch">การตรวจจับแบบ Realtime:</label>
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="realtime-detection-switch" class="sr-only peer">
+                    <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                </label>
+            </div>
+        </div>
+
         <!-- Streaming Video -->
         <div class="flex justify-center mb-4">
             <div class="video-container">
                 <div id="loading-spinner"></div>
                 <img id="camera-stream" src="">
-                <!-- ✅ เพิ่ม Canvas สำหรับ real-time detection overlay -->
+                <!-- ✅ Canvas สำหรับ real-time detection overlay -->
                 <canvas id="detection-overlay"></canvas>
                 <!-- Overlay เมื่อกล้องถูกปิด -->
                 <div id="camera-off-overlay">
