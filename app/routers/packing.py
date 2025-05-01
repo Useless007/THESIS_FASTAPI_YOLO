@@ -23,8 +23,15 @@ stream_lock = asyncio.Lock()  # Lock เพื่อจัดการการ�
 
 # ✅ โหลดโมเดล YOLOv10
 MODEL_PATH = "app/models/best.pt"
+ONNX_MODEL_PATH = "app/models/best.onnx"
 UPLOAD_DIR = "uploads/packing_images"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# ✅ ตรวจสอบว่า ONNX model มีอยู่จริง
+if not os.path.exists(ONNX_MODEL_PATH):
+    print(f"⚠️ ONNX model not found at {ONNX_MODEL_PATH}")
+else:
+    print(f"✅ ONNX model found at {ONNX_MODEL_PATH}")
 
 # stream_lock = threading.Lock()  # Lock เพื่อจัดการการเข้าถึง Stream
 
@@ -33,6 +40,22 @@ try:
 except Exception as e:
     raise HTTPException(status_code=500, detail=f"❌ Failed to load YOLOv10 model: {str(e)}")
 
+# ✅ API สำหรับดาวน์โหลด ONNX model ไปใช้ใน frontend
+@router.get("/model")
+async def get_onnx_model(
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+):
+    """
+    Return the ONNX model file for frontend real-time detection
+    """
+    if not os.path.exists(ONNX_MODEL_PATH):
+        raise HTTPException(status_code=404, detail="ONNX model not found")
+    
+    return FileResponse(
+        ONNX_MODEL_PATH, 
+        media_type="application/octet-stream",
+        filename="best.onnx"
+    )
 
 # ✅ กล้อง IP RTSP
 RTSP_LINK = None
