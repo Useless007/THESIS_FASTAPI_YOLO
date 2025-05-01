@@ -13,6 +13,7 @@ class YOLODetector {
     this.labels = null;
     this.isRunning = false;
     this.loadingMessage = null;
+    this.modelInputName = null; // For dynamically determining input name
   }
 
   async initialize(videoElement, canvasElement) {
@@ -97,12 +98,43 @@ class YOLODetector {
         return false;
       }
 
-      // Fetch the model from our backend API endpoint
+      // Fetch product names from the database first
+      this.updateLoadingMessage("กำลังโหลดข้อมูลสินค้า...");
+      try {
+        const productResponse = await fetch('http://localhost:8001/packing/product-names', {
+          headers: {
+            'Authorization': 'Bearer ' + token,
+          },
+          cache: 'no-store'
+        });
+
+        if (!productResponse.ok) {
+          console.warn(`Failed to fetch product names: ${productResponse.status} ${productResponse.statusText}`);
+          // Continue with default labels if product names can't be fetched
+        } else {
+          const productData = await productResponse.json();
+          if (productData.product_names && productData.product_names.length > 0) {
+            // Use product names from the database as labels
+            this.labels = productData.product_names;
+            console.log(`Loaded ${this.labels.length} product names from database`);
+          }
+        }
+      } catch (productError) {
+        console.warn("Error fetching product names:", productError);
+        // Continue with model loading even if product names can't be fetched
+      }
+
+      // Use relative URL to avoid hard-coding domain
       this.updateLoadingMessage("กำลังดาวน์โหลดโมเดล...");
-      const modelResponse = await fetch('http://localhost:8001/packing/model', {
+
+      // Option to use relative URL
+      const modelUrl = 'http://localhost:8001/packing/model';
+      const modelResponse = await fetch(modelUrl, {
         headers: {
           'Authorization': 'Bearer ' + token,
-        }
+        },
+        // Add cache control to prevent cached responses
+        cache: 'no-store'
       });
 
       if (!modelResponse.ok) {
@@ -112,34 +144,81 @@ class YOLODetector {
       this.updateLoadingMessage("กำลังเตรียมโมเดล...");
       const modelBuffer = await modelResponse.arrayBuffer();
 
-      // Set ONNX Runtime options
+      // Set more compatible ONNX Runtime options with lower memory usage
       const options = {
         executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all'
+        graphOptimizationLevel: 'basic',
+        executionMode: 'sequential',
+        enableCpuMemArena: false,  // Reduce memory usage
+        enableMemPattern: false,   // Reduce memory usage
+        wasm: {
+          numThreads: 1            // Use single thread to avoid threading issues
+        }
       };
 
-      // Create ONNX Session
+      // Create ONNX Session with proper error handling
       this.updateLoadingMessage("กำลังเริ่มโมเดล...");
-      this.session = await ort.InferenceSession.create(modelBuffer, options);
+      try {
+        this.session = await ort.InferenceSession.create(modelBuffer, options);
 
-      console.log("YOLOv10 ONNX model loaded successfully");
+        // Get the input name from the model instead of hardcoding it
+        if (this.session && this.session.inputNames && this.session.inputNames.length > 0) {
+          this.modelInputName = this.session.inputNames[0];
+          console.log(`Model input name detected: ${this.modelInputName}`);
+        } else {
+          // Fallback to common input names
+          this.modelInputName = 'images';
+          console.log("Could not detect input name, using default: 'images'");
+        }
 
-      // Parse model metadata to get labels
-      // For YOLOv10, we'll need to define our labels
-      // This should match the classes your model was trained on
-      this.labels = [
-        "Product1", "Product2", "Product3" // Replace with your actual classes
-      ];
+        console.log("YOLOv10 ONNX model loaded successfully");
 
-      // Generate random colors for each class
-      this.labels.forEach(label => {
-        this.classColors[label] = this.getRandomColor();
-      });
+        // If no labels have been loaded from database, use default labels
+        if (!this.labels || this.labels.length === 0) {
+          console.warn("No product names loaded from database, using default labels");
+          // Fallback to a default list of labels
+          this.labels = [
+            "Arduino Mega 2560",
+            "Arduino UNO WiFi Rev2",
+            "Raspberry Pi Compute Module 4 IO Board",
+            "Raspberry Pi 4 Power Supply",
+            "SparkFun RedBoard",
+            "Raspberry Pi 7\" Touchscreen Display",
+            "BeagleBone Black Rev C",
+            "Arduino Uno R3",
+            "Thunderboard EFM32GG12",
+            "MSP432 P401R LaunchPad Development Kit",
+            "RPI NOIR Camera V2",
+            "Power Profik Kit II",
+            "Raspberry Pi 5 - 8GB RAM",
+            "Arducam",
+            "Raspberry Pi AI Kit",
+            "Raspberry Pi Active Cooler",
+            "Arducam ABS Case for IMX... 25° 24mm Camera Boards"
+          ];
+        }
 
-      this.modelLoaded = true;
-      return true;
+        // Replace with your actual classes from model.names
+        if (this.session.outputNames && this.session.outputNames.includes('output')) {
+          console.log("Found standard output name: 'output'");
+        } else {
+          console.log("Output names:", this.session.outputNames);
+        }
+
+        // Generate random colors for each class
+        this.labels.forEach(label => {
+          this.classColors[label] = this.getRandomColor();
+        });
+
+        this.modelLoaded = true;
+        return true;
+      } catch (sessionError) {
+        console.error("ONNX Session creation error:", sessionError);
+        throw new Error(`ONNX Session creation failed: ${sessionError.message}`);
+      }
     } catch (error) {
       console.error("Error loading YOLOv10 ONNX model:", error);
+      this.updateLoadingMessage(`❌ Error: ${error.message}`);
       this.modelLoaded = false;
       return false;
     }
@@ -209,21 +288,32 @@ class YOLODetector {
       // Preprocess the image
       const inputTensor = this.preprocess(imageData);
 
-      // Run inference
-      // The actual input name might differ based on your model
-      const feeds = { 'images': inputTensor };
+      // Use the dynamically determined input name
+      const feeds = {};
+      feeds[this.modelInputName] = inputTensor;
 
-      console.log("Running inference...");
+      console.log("Running inference with input name:", this.modelInputName);
       const results = await this.session.run(feeds);
 
-      // Process the results
-      // YOLOv10 typically outputs with shape [1, num_detections, 85]
-      // where each detection has [x, y, width, height, confidence, class1_conf, class2_conf, ...]
-      const output = results.output || Object.values(results)[0];
+      // Extract the output - handle different output formats
+      let output;
+      if (results.output) {
+        output = results.output;
+      } else if (this.session.outputNames && this.session.outputNames.length > 0) {
+        const outputName = this.session.outputNames[0];
+        output = results[outputName];
+      } else {
+        // Last resort - try to get first value
+        output = Object.values(results)[0];
+      }
+
+      if (!output) {
+        console.error("Could not find output tensor in results", results);
+        return [];
+      }
 
       // Post-process the detections
       const detections = this.postprocess(output, imageData.width, imageData.height);
-
       return detections;
     } catch (error) {
       console.error("Error during detection:", error);

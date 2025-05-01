@@ -51,10 +51,13 @@ async def get_onnx_model(
     if not os.path.exists(ONNX_MODEL_PATH):
         raise HTTPException(status_code=404, detail="ONNX model not found")
     
+    # สำคัญ: ใช้ content-disposition: attachment เพื่อให้ browser ดาวน์โหลดไฟล์จริงๆ
+    # ชื่อไฟล์ควรเป็นชื่อเดียวกับที่โมเดลถูกสร้างมา ไม่ใช่พาธเต็ม
     return FileResponse(
         ONNX_MODEL_PATH, 
         media_type="application/octet-stream",
-        filename="best.onnx"
+        filename="best.onnx",
+        headers={"Content-Disposition": "attachment; filename=best.onnx"}
     )
 
 # ✅ กล้อง IP RTSP
@@ -529,3 +532,17 @@ async def get_order_image(
         raise HTTPException(status_code=404, detail="No packed order image found.")
 
     return FileResponse(order.image_path, media_type="image/jpeg")
+
+# Add a new endpoint to fetch all product names for the YOLO detector
+@router.get("/product-names", response_class=JSONResponse)
+def get_product_names(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+):
+    """
+    ดึงรายชื่อสินค้าทั้งหมดเพื่อใช้กับ YOLO detector
+    """
+    products = db.query(Product.name).all()
+    product_names = [product[0] for product in products]
+    
+    return JSONResponse(content={"product_names": product_names})
