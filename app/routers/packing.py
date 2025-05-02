@@ -206,7 +206,11 @@ def process_yolo(file_path: str):
     ประมวลผล YOLO บนไฟล์ภาพ
     """
     try:
-        results = model.predict(source=file_path, conf=0.1, iou=0.45, stream=False, device='cpu')
+        # ตรวจสอบว่า CUDA (GPU) พร้อมใช้งานหรือไม่
+        device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+        print(f"🔍 Running YOLO on device: {device}")
+        
+        results = model.predict(source=file_path, conf=0.1, iou=0.45, stream=False, device=device)
         detections = []
 
         for result in results:
