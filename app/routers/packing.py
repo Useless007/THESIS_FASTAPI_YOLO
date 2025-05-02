@@ -15,7 +15,7 @@ from app.models.product import Product
 from app.schemas.order import VerifyRequest
 from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
 from app.database import get_db
-import subprocess,json,shutil,torch,os,cv2,traceback,threading
+import subprocess,json,shutil,torch,os,cv2,traceback,threading,time
 from ultralytics import YOLO
 
 router = APIRouter(prefix="/packing", tags=["Packing Staff"])
@@ -140,6 +140,69 @@ def draw_detections(frame, detections):
     
     return frame
 
+# ✅ ฟังก์ชันสำหรับตรวจจับวัตถุบน frame (นำมาจาก yolo_worker.py ซึ่งทำงานได้จริง)
+def detect_frame(frame, device='cuda:0'):
+    """
+    ตรวจจับวัตถุโดยเขียนเฟรมเป็นไฟล์ชั่วคราว และใช้วิธีการเดียวกับ yolo_worker.py
+    """
+    try:
+        # ตรวจสอบว่า frame เป็น numpy array ที่ถูกต้อง
+        if frame is None or frame.size == 0:
+            print("❌ Invalid frame for detection")
+            return []
+        
+        # สร้างชื่อไฟล์ชั่วคราวที่ไม่ซ้ำกัน
+        temp_path = f"temp_frame_{time.time()}.jpg"
+        
+        # บันทึกภาพลงไฟล์ชั่วคราว
+        cv2.imwrite(temp_path, frame)
+        
+        if not os.path.exists(temp_path):
+            print(f"❌ Failed to write temporary file: {temp_path}")
+            return []
+            
+        try:
+            # ใช้ subprocess เรียก yolo_worker.py แทนการเรียกใช้โมเดลโดยตรง
+            result = subprocess.run(
+                ["python", "app/services/yolo_worker.py", temp_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            if result.returncode != 0:
+                print(f"❌ YOLO worker error in real-time: {result.stderr}")
+                return []
+            
+            # Parse JSON output
+            try:
+                start_index = result.stdout.find("{")
+                end_index = result.stdout.rfind("}") + 1
+                if start_index == -1 or end_index == 0:
+                    return []
+                clean_json = result.stdout[start_index:end_index]
+                output = json.loads(clean_json)
+                
+                # ใช้ผลลัพธ์การตรวจจับวัตถุจาก YOLO worker
+                detections = output.get("detections", [])
+                
+                return detections
+            except json.JSONDecodeError:
+                print("❌ Failed to decode YOLO worker response in real-time.")
+                return []
+                
+        finally:
+            # ลบไฟล์ชั่วคราวทันทีไม่ว่าจะสำเร็จหรือไม่ก็ตาม
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to delete temporary file: {e}")
+    except Exception as e:
+        print(f"❌ Error in frame detection: {str(e)}")
+        traceback.print_exc()
+        return []
+
 # ✅ แคปภาพจากกล้อง
 @router.get("/snapshot")
 async def snapshot(
@@ -243,6 +306,17 @@ async def realtime_detect(
     # ✅ ฟังก์ชันสร้าง Stream ที่มีการตรวจจับวัตถุ
     async def generate():
         try:
+            # เก็บเฟรมล่าสุดที่ทำการตรวจจับแล้ว
+            last_detection_time = 0
+            detection_interval = 0.2  # ทำการตรวจจับทุก 0.2 วินาที (5 FPS สำหรับการตรวจจับ)
+            
+            # กรอบตรวจจับล่าสุด (ใช้วาดบนเฟรมใหม่)
+            last_detections = []
+            
+            # ตั้งค่า device เพื่อใช้ในการตรวจจับ
+            device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+            print(f"🔍 Running YOLO on device: {device} for camera {camera_id}")
+            
             while detection_flags.get(camera_id, True):
                 if camera_id not in video_captures or not video_captures[camera_id].isOpened():
                     print(f"⚠️ กล้อง {camera_id} ถูกปิด")
@@ -250,68 +324,39 @@ async def realtime_detect(
                     
                 success, frame = video_captures[camera_id].read()
                 if not success:
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.01)  # ลดเวลารอเป็น 0.01 วินาที
                     continue
                 
-                # ทำการตรวจจับวัตถุด้วย YOLO
-                try:
-                    # บันทึกภาพชั่วคราว
-                    temp_path = f"temp_frame_{camera_id}.jpg"
-                    cv2.imwrite(temp_path, frame)
+                current_time = time.time()
+                should_detect = (current_time - last_detection_time) >= detection_interval
+                
+                # ทำการตรวจจับเฉพาะเมื่อถึงเวลา
+                if should_detect:
+                    last_detection_time = current_time
                     
-                    # ตรวจสอบว่าไฟล์ถูกบันทึกสำเร็จหรือไม่
-                    if not os.path.exists(temp_path):
-                        print(f"⚠️ ไม่สามารถบันทึกไฟล์ภาพชั่วคราว {temp_path}")
-                        await asyncio.sleep(0.1)
-                        continue
-                    
-                    # ใช้ subprocess เรียก yolo_worker.py เหมือนกับฟังก์ชัน detect_objects
+                    # ทำการตรวจจับวัตถุด้วย YOLO โดยตรง (ไม่ผ่าน subprocess)
                     try:
-                        result = subprocess.run(
-                            ["python", "app/services/yolo_worker.py", temp_path],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            text=True
+                        # ใช้ ThreadPool เพื่อไม่ให้บล็อค event loop
+                        loop = asyncio.get_running_loop()
+                        
+                        # ทำการตรวจจับโดยตรงจากเฟรม (ไม่ต้องบันทึกไฟล์)
+                        # แปลงเฟรมเป็น numpy array เพื่อใช้กับ YOLO
+                        detections = await loop.run_in_executor(
+                            get_executor(),
+                            detect_frame,
+                            frame.copy(),  # ส่งสำเนาของเฟรมไปเพื่อความปลอดภัย
+                            device
                         )
                         
-                        if result.returncode != 0:
-                            print(f"❌ YOLO worker error in real-time: {result.stderr}")
-                            continue
-                        
-                        # Parse JSON output
-                        try:
-                            start_index = result.stdout.find("{")
-                            end_index = result.stdout.rfind("}") + 1
-                            if start_index != -1 and end_index > 0:
-                                clean_json = result.stdout[start_index:end_index]
-                                output = json.loads(clean_json)
-                                
-                                # ใช้ภาพที่มีการวาดกรอบแล้วจาก yolo_worker
-                                annotated_path = output.get("annotated_image")
-                                if annotated_path and os.path.exists(annotated_path):
-                                    # อ่านภาพที่มีการวาดกรอบแล้ว
-                                    frame = cv2.imread(annotated_path)
-                                    
-                                    # ลบไฟล์ที่มีการวาดกรอบ
-                                    try:
-                                        os.remove(annotated_path)
-                                    except Exception as e:
-                                        print(f"⚠️ ไม่สามารถลบไฟล์ที่มีการวาดกรอบ: {e}")
-                        except json.JSONDecodeError:
-                            print("❌ Failed to decode YOLO worker response in real-time.")
+                        # เก็บผลการตรวจจับล่าสุดไว้
+                        last_detections = detections
                         
                     except Exception as e:
-                        print(f"❌ Error running YOLO worker in real-time: {str(e)}")
-                    
-                    # ลบไฟล์ชั่วคราว
-                    try:
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
-                    except Exception as e:
-                        print(f"⚠️ ไม่สามารถลบไฟล์ชั่วคราว: {str(e)}")
-                    
-                except Exception as e:
-                    print(f"❌ Error in real-time detection: {str(e)}")
+                        print(f"❌ Error in real-time detection: {str(e)}")
+                
+                # วาดกรอบลงบนเฟรม (ทุกเฟรม ใช้ผลการตรวจจับล่าสุด)
+                if last_detections:
+                    frame = draw_detections(frame, last_detections)
                 
                 # แปลงเป็น JPEG เพื่อส่งไปแสดงผล
                 _, buffer = cv2.imencode('.jpg', frame)
@@ -320,22 +365,15 @@ async def realtime_detect(
                     b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
                 )
                 
-                # หน่วงเวลาเพื่อไม่ให้ทำงานหนักเกินไป
-                await asyncio.sleep(0.1)
+                # หน่วงเวลาเพื่อไม่ให้ทำงานหนักเกินไป (ลดลงเพื่อให้การส่งภาพเร็วขึ้น)
+                await asyncio.sleep(0.03)  # ประมาณ 30 FPS สำหรับการส่งภาพ
                 
         except Exception as e:
             print(f"❌ Error streaming camera with detection {camera_id}: {e}")
         finally:
             # ปิดการตรวจจับแต่ไม่ปิดกล้อง
             detection_flags[camera_id] = False
-            # ลบไฟล์ชั่วคราวที่อาจหลงเหลืออยู่
-            temp_path = f"temp_frame_{camera_id}.jpg"
-            if os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except:
-                    pass
-    
+
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
 
 # ✅ หยุดการตรวจจับแบบ real-time
