@@ -144,22 +144,43 @@ class YOLODetector {
       this.updateLoadingMessage("กำลังเตรียมโมเดล...");
       const modelBuffer = await modelResponse.arrayBuffer();
 
-      // Set more compatible ONNX Runtime options with lower memory usage
+      console.log("Creating ONNX session with buffer size:", modelBuffer.byteLength);
+
+      // Optimized options for browser compatibility - specifically for YOLOv10 model
       const options = {
         executionProviders: ['wasm'],
-        graphOptimizationLevel: 'basic',
+        graphOptimizationLevel: 'all',
         executionMode: 'sequential',
-        enableCpuMemArena: false,  // Reduce memory usage
-        enableMemPattern: false,   // Reduce memory usage
+        // Reduce memory requirements - critical for browser environments
+        enableCpuMemArena: false,
+        enableMemPattern: false,
+        // Try ONNX Runtime Lite configuration
         wasm: {
-          numThreads: 1            // Use single thread to avoid threading issues
+          numThreads: 1,
+          simd: false,
+          wasmPaths: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.15.1/dist'
         }
       };
 
-      // Create ONNX Session with proper error handling
+      // Check if ONNX Runtime is loaded
+      if (!window.ort) {
+        throw new Error("ONNX Runtime Web is not loaded. Please refresh the page.");
+      }
+
+      // Show more detailed debugging information
       this.updateLoadingMessage("กำลังเริ่มโมเดล...");
+
+      // Add specific error handling with custom error messages
       try {
+        // Additional debugging
+        console.log("ONNX Runtime version:", ort.version);
+
+        // Create session with proper error handling
         this.session = await ort.InferenceSession.create(modelBuffer, options);
+
+        // Get input and output names
+        console.log("Model input names:", this.session.inputNames);
+        console.log("Model output names:", this.session.outputNames);
 
         // Get the input name from the model instead of hardcoding it
         if (this.session && this.session.inputNames && this.session.inputNames.length > 0) {
@@ -214,7 +235,13 @@ class YOLODetector {
         return true;
       } catch (sessionError) {
         console.error("ONNX Session creation error:", sessionError);
-        throw new Error(`ONNX Session creation failed: ${sessionError.message}`);
+
+        // Provide more detailed error information
+        if (sessionError.toString().includes("memory")) {
+          throw new Error("Browser memory limit exceeded. Try using a smaller model or closing other tabs.");
+        } else {
+          throw new Error(`ONNX Session creation failed: ${sessionError.message || 'Unknown error'}`);
+        }
       }
     } catch (error) {
       console.error("Error loading YOLOv10 ONNX model:", error);

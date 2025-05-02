@@ -26,13 +26,15 @@ def export_model_to_onnx(pt_model_path: str, output_path: str):
         # Export to ONNX format with appropriate settings for web compatibility
         logging.info(f"🔄 Exporting model to ONNX format at {output_path}")
         
-        # Export with specific settings for web compatibility
+        # Export with specific settings optimized for web environments
+        # These settings help ensure compatibility with ONNX Runtime Web
         success = model.export(format="onnx", 
-                      imgsz=640,  # Standard YOLO input size
-                      half=False,  # Don't use half precision to ensure compatibility
-                      simplify=True,  # Simplify the model
-                      opset=12,  # Use ONNX opset 12 for better compatibility
-                      dynamic=True)
+                      imgsz=640,        # Standard YOLO input size
+                      half=False,       # Use full precision (float32) for browser compatibility
+                      simplify=True,    # Simplify the model graph
+                      opset=11,         # Use ONNX opset 11 for better web compatibility
+                      dynamic=False,    # Static input shape works better in browsers
+                      verbose=True)     # Show detailed conversion info
         
         if success:
             logging.info(f"✅ Successfully exported model to {output_path}")

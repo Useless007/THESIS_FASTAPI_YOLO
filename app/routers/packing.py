@@ -51,13 +51,21 @@ async def get_onnx_model(
     if not os.path.exists(ONNX_MODEL_PATH):
         raise HTTPException(status_code=404, detail="ONNX model not found")
     
-    # สำคัญ: ใช้ content-disposition: attachment เพื่อให้ browser ดาวน์โหลดไฟล์จริงๆ
-    # ชื่อไฟล์ควรเป็นชื่อเดียวกับที่โมเดลถูกสร้างมา ไม่ใช่พาธเต็ม
+    # แก้ไขเพื่อให้ browser แปลความหมายไฟล์ได้ถูกต้อง
+    # เปลี่ยน media_type เป็น application/octet-stream
+    # และใช้ headers อย่างชัดเจนเพื่อปิดการ transform ข้อมูล
     return FileResponse(
         ONNX_MODEL_PATH, 
         media_type="application/octet-stream",
         filename="best.onnx",
-        headers={"Content-Disposition": "attachment; filename=best.onnx"}
+        headers={
+            "Content-Disposition": "attachment; filename=best.onnx",
+            "Content-Type": "application/octet-stream",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
     )
 
 # ✅ กล้อง IP RTSP
@@ -76,6 +84,8 @@ video_capture.set(cv2.CAP_PROP_FPS, 15)  # ลด Frame Rate
 video_capture.set(cv2.CAP_PROP_POS_MSEC, 5000)  # กำหนด timeout (5 วินาที)
 
 video_captures = {}  # ใช้ camera_id เป็น key
+detection_flags = {}  # ใช้ camera_id เป็น key เพื่อเก็บสถานะว่ากำลังตรวจจับหรือไม่
+detection_processes = {}  # เก็บ process ของการตรวจจับ
 
 async def start_camera(camera_id: int, rtsp_link: str):
     global video_captures
@@ -98,13 +108,37 @@ async def start_camera(camera_id: int, rtsp_link: str):
     return True
 
 async def stop_camera(camera_id: int):
-    global video_captures
+    global video_captures, detection_flags
     if camera_id in video_captures:
         print(f"🛑 ปิดกล้อง {camera_id}")
         video_captures[camera_id].release()
         del video_captures[camera_id]
+        # ยกเลิกการตรวจจับด้วย
+        if camera_id in detection_flags:
+            detection_flags[camera_id] = False
         await asyncio.sleep(1)
     print(f"✅ กล้อง {camera_id} ถูกปิด")
+
+# ฟังก์ชันสำหรับการวาดกรอบและฉลากบนภาพ
+def draw_detections(frame, detections):
+    for detection in detections:
+        label = detection["label"]
+        conf = detection["confidence"]
+        box = detection["box"]
+        
+        x1, y1, x2, y2 = [int(coord) for coord in box]
+        
+        # วาดกรอบ
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        
+        # ตำแหน่งของฉลาก
+        y = y1 - 15 if y1 - 15 > 15 else y1 + 15
+        
+        # วาดฉลากและค่าความเชื่อมั่น
+        label_text = f"{label}: {conf:.2f}"
+        cv2.putText(frame, label_text, (x1, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    
+    return frame
 
 # ✅ แคปภาพจากกล้อง
 @router.get("/snapshot")
@@ -177,6 +211,149 @@ async def stream_video(
 
 
 
+# ✅ สตรีมวิดีโจากกล้องพร้อมการตรวจจับแบบ real-time
+@router.get("/realtime-detect")
+async def realtime_detect(
+    request: Request,
+    camera_id: int = Query(..., description="ID ของกล้องที่ต้องการสตรีมพร้อมตรวจจับ"),
+    token: str = Header(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+):
+    global video_captures, detection_flags
+    
+    # ดึงข้อมูลกล้องจาก DB
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    rtsp_link = camera.stream_url  # ดึง RTSP link จาก DB
+
+    # ตรวจสอบว่ากล้องถูกเปิดแล้วหรือยัง
+    if camera_id not in video_captures or not video_captures[camera_id].isOpened():
+        await start_camera(camera_id, rtsp_link)
+
+    # เตรียม model สำหรับการตรวจจับ
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    print(f"🔍 Running YOLO on device: {device} for camera {camera_id}")
+    
+    # เริ่มตรวจจับ
+    detection_flags[camera_id] = True
+    
+    # ✅ ฟังก์ชันสร้าง Stream ที่มีการตรวจจับวัตถุ
+    async def generate():
+        try:
+            while detection_flags.get(camera_id, True):
+                if camera_id not in video_captures or not video_captures[camera_id].isOpened():
+                    print(f"⚠️ กล้อง {camera_id} ถูกปิด")
+                    break
+                    
+                success, frame = video_captures[camera_id].read()
+                if not success:
+                    await asyncio.sleep(0.1)
+                    continue
+                
+                # ทำการตรวจจับวัตถุด้วย YOLO
+                try:
+                    # บันทึกภาพชั่วคราว
+                    temp_path = f"temp_frame_{camera_id}.jpg"
+                    cv2.imwrite(temp_path, frame)
+                    
+                    # ตรวจสอบว่าไฟล์ถูกบันทึกสำเร็จหรือไม่
+                    if not os.path.exists(temp_path):
+                        print(f"⚠️ ไม่สามารถบันทึกไฟล์ภาพชั่วคราว {temp_path}")
+                        await asyncio.sleep(0.1)
+                        continue
+                    
+                    # ใช้ subprocess เรียก yolo_worker.py เหมือนกับฟังก์ชัน detect_objects
+                    try:
+                        result = subprocess.run(
+                            ["python", "app/services/yolo_worker.py", temp_path],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True
+                        )
+                        
+                        if result.returncode != 0:
+                            print(f"❌ YOLO worker error in real-time: {result.stderr}")
+                            continue
+                        
+                        # Parse JSON output
+                        try:
+                            start_index = result.stdout.find("{")
+                            end_index = result.stdout.rfind("}") + 1
+                            if start_index != -1 and end_index > 0:
+                                clean_json = result.stdout[start_index:end_index]
+                                output = json.loads(clean_json)
+                                
+                                # ใช้ภาพที่มีการวาดกรอบแล้วจาก yolo_worker
+                                annotated_path = output.get("annotated_image")
+                                if annotated_path and os.path.exists(annotated_path):
+                                    # อ่านภาพที่มีการวาดกรอบแล้ว
+                                    frame = cv2.imread(annotated_path)
+                                    
+                                    # ลบไฟล์ที่มีการวาดกรอบ
+                                    try:
+                                        os.remove(annotated_path)
+                                    except Exception as e:
+                                        print(f"⚠️ ไม่สามารถลบไฟล์ที่มีการวาดกรอบ: {e}")
+                        except json.JSONDecodeError:
+                            print("❌ Failed to decode YOLO worker response in real-time.")
+                        
+                    except Exception as e:
+                        print(f"❌ Error running YOLO worker in real-time: {str(e)}")
+                    
+                    # ลบไฟล์ชั่วคราว
+                    try:
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                    except Exception as e:
+                        print(f"⚠️ ไม่สามารถลบไฟล์ชั่วคราว: {str(e)}")
+                    
+                except Exception as e:
+                    print(f"❌ Error in real-time detection: {str(e)}")
+                
+                # แปลงเป็น JPEG เพื่อส่งไปแสดงผล
+                _, buffer = cv2.imencode('.jpg', frame)
+                yield (
+                    b'--frame\r\n'
+                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
+                )
+                
+                # หน่วงเวลาเพื่อไม่ให้ทำงานหนักเกินไป
+                await asyncio.sleep(0.1)
+                
+        except Exception as e:
+            print(f"❌ Error streaming camera with detection {camera_id}: {e}")
+        finally:
+            # ปิดการตรวจจับแต่ไม่ปิดกล้อง
+            detection_flags[camera_id] = False
+            # ลบไฟล์ชั่วคราวที่อาจหลงเหลืออยู่
+            temp_path = f"temp_frame_{camera_id}.jpg"
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+    
+    return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
+
+# ✅ หยุดการตรวจจับแบบ real-time
+@router.get("/stop-realtime")
+async def stop_realtime_detection(
+    camera_id: int = Query(..., description="ID ของกล้องที่ต้องการหยุดตรวจจับ"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+):
+    global detection_flags
+    
+    print(f"🔄 คำขอให้หยุดตรวจจับ real-time กล้อง {camera_id}")
+    
+    # หยุดการตรวจจับแต่ไม่ปิดกล้อง
+    detection_flags[camera_id] = False
+    
+    return JSONResponse(content={"message": f"🛑 หยุดการตรวจจับ real-time กล้อง {camera_id} สำเร็จ"})
+
 # ✅ ปิดกล้อง
 @router.get("/stop-stream")
 async def stop_stream(
@@ -206,10 +383,16 @@ def process_yolo(file_path: str):
     ประมวลผล YOLO บนไฟล์ภาพ
     """
     try:
+        # ตรวจสอบว่าไฟล์มีอยู่จริง
+        if not os.path.exists(file_path):
+            print(f"❌ File not found: {file_path}")
+            return []
+        
         # ตรวจสอบว่า CUDA (GPU) พร้อมใช้งานหรือไม่
         device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         print(f"🔍 Running YOLO on device: {device}")
         
+        # ใช้ file path โดยตรง (อย่าแปลงเป็น OpenCV image)
         results = model.predict(source=file_path, conf=0.1, iou=0.45, stream=False, device=device)
         detections = []
 
@@ -231,7 +414,8 @@ def process_yolo(file_path: str):
         return detections
     except Exception as e:
         print(f"❌ Error in YOLO processing: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error processing YOLO predictions")
+        traceback.print_exc()  # เพิ่ม traceback เพื่อดูรายละเอียดข้อผิดพลาด
+        return []  # ส่งคืนลิสต์ว่างแทนการ raise exception เพื่อให้โปรแกรมทำงานต่อได้
 
 
 
