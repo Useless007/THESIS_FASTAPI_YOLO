@@ -264,7 +264,7 @@ def get_pending_orders(
 
         orders_data.append({
             "id": order.order_id,
-            "email": order.user.email if order.user else None,  # ดึง email จาก user relationship
+            "email": order.customer.email if order.customer else None,  # แก้จาก order.user เป็น order.customer
             "item": items_data,
             "total": order.total,
             "status": order.status,
@@ -377,9 +377,30 @@ def get_users_to_activate(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
 ):
-    users = db.query(User).filter(User.is_active == False, User.role_id == 1).all()
-    # print(users)
-    return users
+    """
+    ดึงข้อมูลพนักงานที่ยังไม่ได้รับการอนุมัติ (is_active = False)
+    """
+    from app.models.account import Account
+    
+    # ใช้ join กับตาราง Account เพื่อตรวจสอบ is_active
+    users = db.query(User)\
+             .join(Account, User.account_id == Account.id)\
+             .filter(Account.is_active == False, User.role_id == 1)\
+             .all()
+    
+    print(f"🔍 Found {len(users)} employees waiting for activation")
+    
+    # แปลงข้อมูลเพื่อส่งกลับในรูปแบบ JSON
+    user_data = []
+    for user in users:
+        user_data.append({
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "position": user.position.position_name if user.position else None
+        })
+    
+    return user_data
 
 @router.get("/customers-to-activate", response_class=JSONResponse)
 def get_customers_to_activate(
@@ -456,26 +477,28 @@ def get_work_status(
 
 @router.get("/my-work-status", response_class=JSONResponse)
 def get_my_work_status(
-    date: str,
+    date: str,  # รับวันที่ที่ต้องการดูข้อมูล เช่น "2024-02-01"
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    ✅ ให้พนักงานดูสถานะของตนเองในแต่ละวัน
+    ✅ ดึงประวัติการทำงานของพนักงานตามวันที่
     """
     try:
-        # แปลงวันที่เป็น datetime object
+        # แปลง date string เป็น datetime
         date_obj = datetime.strptime(date, "%Y-%m-%d")
+        
+        # กำหนดช่วงเวลาเริ่มต้นและสิ้นสุดของวัน
         start_date = date_obj.replace(hour=0, minute=0, second=0)
         end_date = date_obj.replace(hour=23, minute=59, second=59)
 
-        # ตรวจสอบว่าพนักงานคนนี้ถูก assign กับกล้องใด
-        assigned_camera = db.query(Camera).filter(Camera.assigned_to == current_user.id).first()
-        
-        # แทนที่จะใช้ table_number ให้ใช้ name หรือ id แทน
-        table_info = assigned_camera.name if assigned_camera else "N/A"
+        # หาหมายเลขโต๊ะที่พนักงานใช้งาน
+        table_info = "N/A"
+        camera = db.query(Camera).filter(Camera.assigned_to == current_user.id).first()
+        if camera:
+            table_info = camera.name
 
-        # ดึงข้อมูล orders ของพนักงาน
+        # ดึงคำสั่งซื้อทั้งหมดที่พนักงานได้รับมอบหมาย
         orders = (
             db.query(Order)
             .options(

@@ -49,9 +49,6 @@
     </div>
   </main>
 
-
-
-
   <!-- Modal สำหรับเลือกรับพนักงานและกำหนดยศ -->
   <div id="roleModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full hidden">
     <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
@@ -71,6 +68,27 @@
       <div class="mt-4 flex justify-end space-x-2">
         <button onclick="closeRoleModal()" class="bg-gray-500 text-white px-4 py-2 rounded-md">ปิด</button>
         <button onclick="assignRoleAndActivate()" class="bg-blue-500 text-white px-4 py-2 rounded-md">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal สำหรับเลือกตำแหน่งพนักงาน -->
+  <div id="positionModal" class="fixed inset-0 bg-gray-600 bg-opacity-75 overflow-y-auto h-full w-full hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+      <h3 class="text-lg font-semibold">📝 เลือกตำแหน่งพนักงาน</h3>
+      <div class="mt-2 space-y-2">
+        <input type="hidden" id="selectedUserId">
+        <label for="position-select" class="block text-sm font-medium text-gray-700">เลือกตำแหน่ง:</label>
+        <select id="position-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring">
+          <option value="1">Executive</option>
+          <option value="2">Admin</option>
+          <option value="3">Preparation Staff</option>
+          <option value="4">Packing Staff</option>
+        </select>
+      </div>
+      <div class="mt-4 flex justify-end space-x-2">
+        <button onclick="closePositionModal()" class="bg-gray-500 text-white px-4 py-2 rounded-md">ปิด</button>
+        <button onclick="confirmActivate()" class="bg-blue-500 text-white px-4 py-2 rounded-md">ยืนยัน</button>
       </div>
     </div>
   </div>
@@ -131,11 +149,22 @@
       });
     });
 
-
     // ฟังก์ชัน Activate User ผ่าน jQuery AJAX
     function activateUser(userId) {
-      // console.log("🔄 กำลังอัปเดตสถานะผู้ใช้", userId);
+      // แสดง modal เลือกตำแหน่งก่อนอนุมัติ
+      $('#positionModal').removeClass('hidden');
+      $('#selectedUserId').val(userId);
+    }
 
+    // ยืนยันการ Activate พร้อมกำหนดตำแหน่ง
+    function confirmActivate() {
+      const userId = $('#selectedUserId').val();
+      const position = $('#position-select').val();
+
+      // ปิด modal
+      $('#positionModal').addClass('hidden');
+
+      // ทำการ activate user
       $.ajax({
         url: `/admin/${userId}/activate`,
         type: 'PUT',
@@ -144,16 +173,38 @@
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         success: function (response) {
-          // console.log("✅ สถานะผู้ใช้ถูกอัปเดตสำเร็จ:", response);
-          alert(`✅ User ${userId} activated successfully.`);
-          $(`#user-list li[data-id="${userId}"]`).remove(); // ลบผู้ใช้ที่ Activate ออกจากรายการ
+          // หลังจาก activate สำเร็จ ให้กำหนดตำแหน่งต่อ
+          $.ajax({
+            url: `/admin/users/${userId}/update-position`,
+            type: 'PUT',
+            contentType: 'application/json',
+            data: JSON.stringify({ position: position }),
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            success: function () {
+              alert(`✅ บัญชีพนักงานถูกอนุมัติและกำหนดตำแหน่งเรียบร้อยแล้ว`);
+              $(`#user-list li[data-id="${userId}"]`).remove(); // ลบผู้ใช้ที่ Activate ออกจากรายการ
+            },
+            error: function (xhr) {
+              console.error("❌ เกิดข้อผิดพลาดในการกำหนดตำแหน่ง:", xhr.responseJSON?.detail || xhr.statusText);
+              alert(`✅ บัญชีถูกอนุมัติแล้วแต่ไม่สามารถกำหนดตำแหน่งได้`);
+              $(`#user-list li[data-id="${userId}"]`).remove();
+            }
+          });
         },
         error: function (xhr, status, error) {
-          console.error("❌ เกิดข้อผิดพลาด:", xhr.responseJSON.detail || error);
-          alert(`❌ Failed to activate user: ${xhr.responseJSON.detail || error}`);
+          console.error("❌ เกิดข้อผิดพลาด:", xhr.responseJSON?.detail || error);
+          alert(`❌ ไม่สามารถอนุมัติบัญชีได้: ${xhr.responseJSON?.detail || error}`);
         }
       });
     }
+
+    // ปิด Modal เลือกตำแหน่ง
+    function closePositionModal() {
+      $('#positionModal').addClass('hidden');
+    }
+
     // ฟังก์ชัน Delete User ผ่าน jQuery AJAX
     function deleteUser(userId) {
       // console.log("🗑️ กำลังลบผู้ใช้", userId);

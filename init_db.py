@@ -235,7 +235,15 @@ def init_db():
                 "name": "ทักษ์ดนัย สุวรรณพันธ์",
                 "phone": "0891234571",
                 "position_id": 1,  # executive
-                "is_active": True
+                "is_active": True,
+                "address": {
+                    "house_number": "99/2",
+                    "village_no": "3",
+                    "subdistrict": "หนองป่าครั่ง",
+                    "district": "เมือง",
+                    "province": "เชียงใหม่",
+                    "postal_code": "50000"
+                }
             },
             {
                 "email": "admin@example.com",
@@ -243,7 +251,15 @@ def init_db():
                 "name": "สมพงษ์ รุ่งเรืองวิทย์",
                 "phone": "0891234568",
                 "position_id": 2,  # admin
-                "is_active": True
+                "is_active": True,
+                "address": {
+                    "house_number": "45/18",
+                    "village_no": "7",
+                    "subdistrict": "สุเทพ",
+                    "district": "เมือง",
+                    "province": "เชียงใหม่",
+                    "postal_code": "50200"
+                }
             },
             {
                 "email": "preparation@example.com",
@@ -251,7 +267,15 @@ def init_db():
                 "name": "วิภาวดี จันทร์เพ็ญ",
                 "phone": "0891234588",
                 "position_id": 3,  # preparation
-                "is_active": True
+                "is_active": True,
+                "address": {
+                    "house_number": "125/8",
+                    "village_no": "4",
+                    "subdistrict": "ช้างคลาน",
+                    "district": "เมือง",
+                    "province": "เชียงใหม่",
+                    "postal_code": "50100"
+                }
             },
             {
                 "email": "packing@example.com",
@@ -259,7 +283,15 @@ def init_db():
                 "name": "ชาญชัย นาคสวัสดิ์",
                 "phone": "0891234577",
                 "position_id": 4,  # packing
-                "is_active": True
+                "is_active": True,
+                "address": {
+                    "house_number": "222/33",
+                    "village_no": "9",
+                    "subdistrict": "หายยา",
+                    "district": "เมือง",
+                    "province": "เชียงใหม่",
+                    "postal_code": "50100"
+                }
             }
         ]
 
@@ -288,7 +320,18 @@ def init_db():
                     created_at=datetime.now()
                 )
                 db.add(user)
+                db.flush()  # ให้ flush เพื่อให้ได้ user.id ก่อนที่จะสร้าง address
                 print(f"➕ สร้างบัญชีพนักงาน: {employee_data['name']} ({employee_data['email']}) เรียบร้อยแล้ว")
+                
+                # เพิ่มที่อยู่ให้กับพนักงาน
+                if employee_data["address"]:
+                    address = Address(
+                        user_id=user.id,  # ใช้ user.id ที่ได้หลังจาก flush
+                        customer_id=None,
+                        **employee_data["address"]
+                    )
+                    db.add(address)
+                    print(f"➕ เพิ่มที่อยู่ให้กับพนักงาน: {employee_data['email']} เรียบร้อยแล้ว")
                 
                 db.commit()
 
@@ -329,7 +372,7 @@ def init_db():
                 "password": "customer1234",
                 "name": "สุพรรษา เลิศจิตวาณิชย์",
                 "phone": "0891234565",
-                "is_active": False,  # ยังไม่ได้รับการอนุมัติ
+                "is_active": True,
                 "address": None
             },
             {

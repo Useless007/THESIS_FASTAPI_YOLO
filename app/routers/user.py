@@ -202,14 +202,22 @@ def post_employee_register_form(
     password: str = Form(...),
     name: str = Form(...),
     phone: str = Form(None),
+    # Address fields
+    house_number: str = Form(...),
+    village_no: str = Form(None),
+    subdistrict: str = Form(...),
+    district: str = Form(...),
+    province: str = Form(...),
+    postal_code: str = Form(...),
     db: Session = Depends(get_db),
 ):
     """
-    รับข้อมูลจากฟอร์มและสร้างพนักงานใหม่ในฐานข้อมูล
+    รับข้อมูลจากฟอร์มและสร้างพนักงานใหม่ในฐานข้อมูล พร้อมข้อมูลที่อยู่
     พนักงานต้องรอการอนุมัติจากแอดมินก่อนเข้าสู่ระบบได้
     """
     from app.crud.user import create_user
     from app.schemas.user import UserCreate
+    from app.models.address import Address
     
     user_data = UserCreate(
         email=email,
@@ -223,6 +231,19 @@ def post_employee_register_form(
     try:
         # สร้างพนักงานใหม่
         db_user = create_user(db=db, user=user_data)
+        
+        # สร้างข้อมูลที่อยู่และเชื่อมกับ user_id
+        new_address = Address(
+            user_id=db_user.id,
+            house_number=house_number,
+            village_no=village_no,
+            subdistrict=subdistrict,
+            district=district,
+            province=province,
+            postal_code=postal_code
+        )
+        db.add(new_address)
+        db.commit()
         
         # ส่งกลับหน้ารอการอนุมัติจากแอดมิน
         return templates.TemplateResponse(
@@ -240,6 +261,12 @@ def post_employee_register_form(
         else:
             message = f"❌ เกิดข้อผิดพลาด: {str(e.orig)}"
             
+        return templates.TemplateResponse(
+            "register_employee.html",
+            {"request": request, "error": message}
+        )
+    except Exception as e:
+        message = f"❌ เกิดข้อผิดพลาด: {str(e)}"
         return templates.TemplateResponse(
             "register_employee.html",
             {"request": request, "error": message}
