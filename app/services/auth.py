@@ -10,6 +10,7 @@ from fastapi.security import OAuth2PasswordBearer
 from app.database import get_db
 from app.models.user import User
 from app.models.customer import Customer
+from app.models.account import Account
 from app.config import settings
 from typing import Optional, Union, Dict, Any
 
@@ -81,17 +82,23 @@ def get_current_actor(request: Request, db: Session = Depends(get_db)):
         # ✅ ตรวจสอบว่าเป็น Customer หรือ User
         is_customer = payload.get("is_customer", False)
         
+        # ✅ ดึง Account จากฐานข้อมูลด้วย email
+        account = db.query(Account).filter(Account.email == email).first()
+        if account is None:
+            raise HTTPException(status_code=401, detail="Account not found")
+            
         if is_customer:
             # ✅ ดึง Customer จากฐานข้อมูล
-            actor = db.query(Customer).filter(Customer.email == email).first()
+            actor = db.query(Customer).filter(Customer.account_id == account.id).first()
+            if actor is None:
+                raise HTTPException(status_code=401, detail="Customer not found")
         else:
             # ✅ ดึง User (Employee) จากฐานข้อมูล
-            actor = db.query(User).filter(User.email == email).first()
+            actor = db.query(User).filter(User.account_id == account.id).first()
+            if actor is None:
+                raise HTTPException(status_code=401, detail="User not found")
             
-        if actor is None:
-            raise HTTPException(status_code=401, detail=f"{'Customer' if is_customer else 'User'} not found")
-        
-        print(f"✅ Authenticated {'Customer' if is_customer else 'User'}: {actor.email}")
+        print(f"✅ Authenticated {'Customer' if is_customer else 'User'}: {account.email}")
         return actor
 
     except jwt.ExpiredSignatureError:
@@ -203,3 +210,28 @@ def get_user_with_role_and_position_and_isActive(required_role: int, required_po
             )
         return current_user
     return role_position_and_active_checker
+
+def authenticate_account(email: str, password: str, db: Session):
+    """
+    Authenticate a user or customer using email and password.
+    Returns (account, is_customer) if successful, or None if authentication fails.
+    """
+    # ดึงข้อมูล Account จาก email
+    account = db.query(Account).filter(Account.email == email).first()
+    if not account or not account.is_active:
+        return None, False
+        
+    # ตรวจสอบรหัสผ่าน
+    if not verify_password(password, account.password):
+        return None, False
+        
+    # ตรวจสอบว่าเป็น Customer หรือ User
+    customer = db.query(Customer).filter(Customer.account_id == account.id).first()
+    if customer:
+        return account, True
+        
+    user = db.query(User).filter(User.account_id == account.id).first()
+    if user:
+        return account, False
+        
+    return None, False

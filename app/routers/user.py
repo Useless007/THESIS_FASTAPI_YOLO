@@ -11,8 +11,9 @@ from fastapi.responses import RedirectResponse
 from typing import Optional
 
 from app.models.user import User
+from app.models.account import Account
 from app.database import get_db
-from app.services.auth import get_current_user, verify_password, hash_password
+from app.services.auth import get_current_user, verify_password, hash_password, authenticate_account
 from app.schemas.user import UserCreate, UserUpdate, UserOut
 from app.crud.user import (
     create_user,
@@ -72,57 +73,22 @@ def authenticate_user_and_generate_token(
     ตรวจสอบข้อมูลการเข้าสู่ระบบและส่ง Token กลับ
     ตรวจสอบทั้ง User (พนักงาน) และ Customer (ลูกค้า)
     """
-    # ตรวจสอบใน User table (พนักงาน) ก่อน
-    user = db.query(User).filter(User.email == username).first()
+    # ใช้ฟังก์ชันใหม่สำหรับตรวจสอบการเข้าสู่ระบบที่ใช้ Account เป็นศูนย์กลาง
+    account, is_customer = authenticate_account(username, password, db)
     
-    # ถ้าไม่พบในตาราง User ให้ตรวจสอบใน Customer table
-    customer = None
-    is_customer = False
-    
-    if not user or not verify_password(password, user.password):
-        # ไม่พบพนักงาน หรือ password ไม่ถูกต้อง ให้ตรวจสอบในตาราง Customer
-        from app.models.customer import Customer
-        customer = db.query(Customer).filter(Customer.email == username).first()
-        
-        if not customer or not verify_password(password, customer.password):
-            # ไม่พบทั้งใน User และ Customer หรือ password ไม่ถูกต้อง
-            return templates.TemplateResponse(
-                "login.html",
-                {
-                    "request": request,
-                    "message": "❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
-                    "message_color": "red"
-                }
-            )
-        is_customer = True
-    
-    # ตรวจสอบสถานะการใช้งานของพนักงาน
-    if not is_customer and not user.is_active:
-        # พนักงานยังไม่ได้รับการอนุมัติ
+    if not account:
+        # ไม่พบผู้ใช้หรือรหัสผ่านไม่ถูกต้อง
         return templates.TemplateResponse(
             "login.html",
             {
                 "request": request,
-                "message": "❌ บัญชีของคุณยังไม่ได้รับการอนุมัติจากแอดมิน",
+                "message": "❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
                 "message_color": "red"
             }
         )
-        
-    # ตรวจสอบสถานะการใช้งานของลูกค้า
-    if is_customer and not customer.is_active:
-        # ลูกค้ายังไม่ได้รับการอนุมัติ
-        return templates.TemplateResponse(
-            "login.html",
-            {
-                "request": request,
-                "message": "❌ บัญชีของคุณยังไม่ได้รับการอนุมัติ",
-                "message_color": "red"
-            }
-        )
-
+    
     # สร้าง Token สำหรับผู้ใช้
-    authenticated_email = customer.email if is_customer else user.email
-    access_token = create_access_token(data={"sub": authenticated_email}, is_customer=is_customer)
+    access_token = create_access_token(data={"sub": account.email}, is_customer=is_customer)
     
     response = RedirectResponse(url="/", status_code=303)
     response.set_cookie(
@@ -141,16 +107,13 @@ def authenticate_user_and_generate_token(form_data: OAuth2PasswordRequestForm = 
     """
     Endpoint สำหรับเข้าสู่ระบบและสร้าง JWT token
     """
-    # ตรวจสอบ email/password
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.password):
+    # ตรวจสอบ email/password โดยใช้ Account
+    account, is_customer = authenticate_account(form_data.username, form_data.password, db)
+    if not account:
         raise HTTPException(status_code=401, detail="Incorrect username or password")
 
-    # อัปเดตสถานะเป็น active
-    # update_user_status(db, user.id, True)
-
     # สร้างและส่ง JWT token
-    access_token = create_access_token(data={"sub": user.email})
+    access_token = create_access_token(data={"sub": account.email}, is_customer=is_customer)
     return {"access_token": access_token, "token_type": "bearer"}
 
 @protected_router.get("/register", response_class=HTMLResponse, tags=["HTML"])
@@ -254,6 +217,7 @@ def post_employee_register_form(
         name=name,
         phone=phone,
         role_id=1,  # 1 = employee
+        position_id=1,  # default position
         is_active=False  # เริ่มต้นเป็น inactive รอการอนุมัติ
     )
     try:
@@ -307,17 +271,17 @@ def check_user_role(
         return {"status": "success", "message": "Guest user"}
     
     if role:
-        if current_user.role != role:
+        if current_user.role_id != int(role):
             return {"status": "error", "message": f"Requires role: {role}"}
     
     if position:
-        if current_user.position != position:
+        if current_user.position_id != int(position):
             return {"status": "error", "message": f"Requires position: {position}"}
     
     return {
         "status": "success",
-        "role": current_user.role,
-        "position": current_user.position,
+        "role": current_user.role_id,
+        "position": current_user.position_id,
         "is_active": current_user.is_active
     }
 
@@ -343,6 +307,11 @@ def get_user_profile(request: Request, db: Session = Depends(get_db)):
     
     # ตรวจสอบว่าเป็น Customer หรือ User
     is_customer = isinstance(current_actor, Customer)
+    
+    # ดึงข้อมูล Account ที่เชื่อมโยงกับ actor
+    account = db.query(Account).filter(Account.id == current_actor.account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="ไม่พบข้อมูลบัญชี")
     
     address_info = None
     
@@ -378,9 +347,9 @@ def get_user_profile(request: Request, db: Session = Depends(get_db)):
             }
     
     return {
-        "name": current_actor.name,
-        "email": current_actor.email,
-        "phone": current_actor.phone,
+        "name": account.name,
+        "email": account.email,
+        "phone": account.phone,
         "address": address_info,  # ส่งข้อมูลที่อยู่แบบ object
         "is_customer": is_customer
     }
@@ -492,13 +461,17 @@ def reset_password(
     """
     รีเซ็ตรหัสผ่านของผู้ใช้
     """
+    # ดึงข้อมูล Account ที่เชื่อมโยงกับผู้ใช้
+    account = db.query(Account).filter(Account.id == current_user.account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="ไม่พบข้อมูลบัญชี")
+    
     # ตรวจสอบรหัสผ่านปัจจุบัน
-    if not verify_password(current_password, current_user.password):
+    if not verify_password(current_password, account.password):
         raise HTTPException(status_code=400, detail="รหัสผ่านปัจจุบันไม่ถูกต้อง")
     
     # อัปเดตรหัสผ่านใหม่
-    user = db.query(User).filter(User.id == current_user.id).first()
-    user.password = hash_password(new_password)  # hash รหัสผ่านใหม่ก่อนบันทึก
+    account.password = hash_password(new_password)  # hash รหัสผ่านใหม่ก่อนบันทึก
     db.commit()
     
     return {"status": "success", "message": "รีเซ็ตรหัสผ่านสำเร็จ"}

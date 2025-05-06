@@ -168,6 +168,7 @@ async def checkout(
     """
     from app.services.auth import get_current_actor
     from app.models.customer import Customer
+    from app.models.account import Account
     
     # ดึงข้อมูลผู้ใช้ปัจจุบัน (ลูกค้าหรือพนักงาน)
     current_actor = get_current_actor(request, db)
@@ -178,40 +179,50 @@ async def checkout(
     # ตรวจสอบว่าเป็น Customer หรือ User
     is_customer = isinstance(current_actor, Customer)
 
-    # ดึงหรือสร้างข้อมูลลูกค้า (ถ้าเป็นพนักงานที่สั่งซื้อจะต้องมีข้อมูลลูกค้า)
+    # ดึงหรือสร้างข้อมูลลูกค้า (ถ้าเป็นพนักงานที่สั่งซื้อ)
     customer_id = None
     if is_customer:
         # ถ้าเป็นลูกค้าอยู่แล้ว ใช้ ID ของลูกค้านั้น
         customer_id = current_actor.id
-        # อัปเดตข้อมูลลูกค้า
-        current_actor.name = fullname
-        current_actor.phone = phone
+        # อัปเดตข้อมูลลูกค้าผ่านฐานข้อมูล
+        customer = db.query(Customer).filter(Customer.id == current_actor.id).first()
+        if customer:
+            # Update the associated account instead of setting read-only properties directly
+            if customer.account:
+                customer.account.name = fullname
+                customer.account.phone = phone
     else:
-        # ถ้าเป็นพนักงาน ต้องสร้างลูกค้าชั่วคราวและเชื่อมโยงกับพนักงาน
-        # หรือตรวจสอบว่ามีข้อมูลลูกค้าที่เชื่อมโยงกับพนักงานคนนี้หรือไม่
-        customer = db.query(Customer).filter(Customer.email == current_actor.email).first()
+        # ถ้าเป็นพนักงาน ให้ดึงข้อมูลหรือสร้างลูกค้าใหม่ที่เชื่อมโยงกับบัญชีเดียวกัน
+        
+        # ดึงข้อมูล Account ของพนักงาน
+        from app.models.account import Account
+        account = db.query(Account).filter(Account.email == current_actor.email).first()
+        
+        if not account:
+            raise HTTPException(status_code=500, detail="❌ ไม่พบข้อมูลบัญชีของพนักงาน")
+        
+        # ตรวจสอบว่ามีลูกค้าที่เชื่อมโยงกับบัญชีนี้หรือไม่
+        customer = db.query(Customer).filter(Customer.account_id == account.id).first()
+        
         if not customer:
-            # สร้างลูกค้าใหม่จากข้อมูลพนักงาน
-            from app.crud.customer import create_customer
-            from app.schemas.customer import CustomerCreate
-            
-            customer_data = CustomerCreate(
-                email=current_actor.email,
-                password=current_actor.password,  # ใช้รหัสผ่านเดียวกับพนักงาน
-                name=fullname,
-                phone=phone,
-                is_active=True
-            )
+            # สร้างลูกค้าใหม่ที่เชื่อมโยงกับบัญชีพนักงานที่มีอยู่แล้ว
             try:
-                customer = create_customer(db=db, customer=customer_data)
-                customer_id = customer.id
+                # สร้าง customer ใหม่โดยใช้เฉพาะ account_id ซึ่งเป็น attribute ที่สามารถตั้งค่าได้
+                new_customer = Customer(
+                    account_id=account.id
+                )
+                db.add(new_customer)
+                db.flush()  # ให้ได้ ID ของลูกค้าใหม่
+                customer_id = new_customer.id
+                customer = new_customer
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"❌ ไม่สามารถสร้างข้อมูลลูกค้าได้: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"❌ ไม่สามารถสร้างข้อมูลลูกค้าจากบัญชีพนักงานได้: {str(e)}")
         else:
             customer_id = customer.id
-            # อัปเดตข้อมูลลูกค้า
-            customer.name = fullname
-            customer.phone = phone
+        
+        # อัปเดตข้อมูลบัญชี
+        account.name = fullname
+        account.phone = phone
 
     try:
         cart_data = json.loads(cart)

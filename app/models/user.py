@@ -11,22 +11,20 @@ if typing.TYPE_CHECKING:
     from .order import Order
     from .camera import Camera
     from .address import Address
+    from .account import Account
 
 class User(Base):
     __tablename__ = "tb_users"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    email = Column(String(255), unique=True, nullable=False)
-    password = Column(String(255), nullable=False)
+    account_id = Column(Integer, ForeignKey("tb_accounts.id"), nullable=False, unique=True)
     role_id = Column(Integer, ForeignKey("tb_roles.role_id"), nullable=False)
     position_id = Column(Integer, ForeignKey("tb_positions.position_id"), nullable=True)
-    name = Column(String(255), nullable=False)
-    phone = Column(String(255), unique=True, nullable=True)
-    created_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=True)
-    is_active = Column(Boolean, nullable=True)
     
-    # ความสัมพันธ์กับตารางอื่น - ใช้ string reference แทน direct class
+    # ความสัมพันธ์กับตารางอื่น
+    account = relationship("Account", back_populates="user")
     role = relationship("Role", back_populates="users")
     position = relationship("Position", back_populates="users")
     assigned_orders = relationship("Order", foreign_keys="Order.assigned_to", back_populates="assigned_user")
@@ -34,7 +32,32 @@ class User(Base):
     addresses = relationship("Address", back_populates="user", foreign_keys="Address.user_id")
     
     def __repr__(self):
-        return f"<User(id={self.id}, email='{self.email}', role_id={self.role_id}, position_id={self.position_id})>"
+        return f"<User(id={self.id}, account_id={self.account_id}, role_id={self.role_id}, position_id={self.position_id})>"
+    
+    @property
+    def email(self):
+        """Get the user's email from the associated account"""
+        return self.account.email if self.account else None
+    
+    @property
+    def name(self):
+        """Get the user's name from the associated account"""
+        return self.account.name if self.account else None
+    
+    @property
+    def phone(self):
+        """Get the user's phone from the associated account"""
+        return self.account.phone if self.account else None
+    
+    @property
+    def password(self):
+        """Get the user's password from the associated account"""
+        return self.account.password if self.account else None
+    
+    @property
+    def is_active(self):
+        """Get the user's active status from the associated account"""
+        return self.account.is_active if self.account else False
     
     @property
     def is_employee(self):

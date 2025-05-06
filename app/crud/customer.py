@@ -2,6 +2,7 @@
 
 from sqlalchemy.orm import Session
 from app.models.customer import Customer
+from app.models.account import Account
 from app.models.address import Address
 from app.schemas.customer import CustomerCreate, CustomerUpdate
 from app.services.auth import verify_password, hash_password
@@ -14,13 +15,22 @@ def create_customer(db: Session, customer: CustomerCreate):
     # แฮชรหัสผ่านก่อนบันทึก
     hashed_password = hash_password(customer.password)
     
-    db_customer = Customer(
+    # สร้าง Account ก่อน
+    db_account = Account(
         email=customer.email,
         password=hashed_password,
         name=customer.name,
         phone=customer.phone,
         created_at=datetime.utcnow(),
         is_active=customer.is_active
+    )
+    db.add(db_account)
+    db.flush()  # ใช้ flush เพื่อให้ได้ id ของ account
+    
+    # สร้าง Customer ที่เชื่อมโยงกับ Account
+    db_customer = Customer(
+        account_id=db_account.id,
+        created_at=datetime.utcnow()
     )
     db.add(db_customer)
     db.commit()
@@ -35,7 +45,10 @@ def get_customer_by_id(db: Session, customer_id: int):
 
 def get_customer_by_email(db: Session, email: str):
     """Get customer by email"""
-    return db.query(Customer).filter(Customer.email == email).first()
+    return db.query(Customer)\
+             .join(Account, Account.id == Customer.account_id)\
+             .filter(Account.email == email)\
+             .first()
 
 
 def get_all_customers(db: Session, skip: int = 0, limit: int = 100):
@@ -48,22 +61,28 @@ def update_customer(db: Session, customer_id: int, customer: CustomerUpdate):
     db_customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not db_customer:
         return None
+        
+    # ดึง Account ที่เชื่อมโยงกับ Customer
+    db_account = db.query(Account).filter(Account.id == db_customer.account_id).first()
+    if not db_account:
+        return None
 
     # แฮชรหัสผ่านหากมีการอัปเดต
     if customer.password:
         hashed_password = hash_password(customer.password)
-        db_customer.password = hashed_password
+        db_account.password = hashed_password
 
-    # อัปเดตฟิลด์ต่างๆ
+    # อัปเดตฟิลด์ต่างๆ ใน account
     if customer.email:
-        db_customer.email = customer.email
+        db_account.email = customer.email
     if customer.name:
-        db_customer.name = customer.name
+        db_account.name = customer.name
     if customer.phone:
-        db_customer.phone = customer.phone
+        db_account.phone = customer.phone
     if customer.is_active is not None:
-        db_customer.is_active = customer.is_active
+        db_account.is_active = customer.is_active
     
+    db_account.updated_at = datetime.utcnow()
     db_customer.updated_at = datetime.utcnow()
     
     db.commit()
@@ -76,7 +95,17 @@ def delete_customer(db: Session, customer_id: int):
     db_customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not db_customer:
         return None
+        
+    # ดึง Account ที่เชื่อมโยงกับ Customer
+    db_account = db.query(Account).filter(Account.id == db_customer.account_id).first()
+    
+    # ลบ Customer ก่อน
     db.delete(db_customer)
+    
+    # แล้วจึงลบ Account
+    if db_account:
+        db.delete(db_account)
+        
     db.commit()
     return db_customer
 
@@ -86,8 +115,16 @@ def update_customer_status(db: Session, customer_id: int, is_active: bool):
     db_customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not db_customer:
         return None
-    db_customer.is_active = is_active
+        
+    # ดึง Account ที่เชื่อมโยงกับ Customer
+    db_account = db.query(Account).filter(Account.id == db_customer.account_id).first()
+    if not db_account:
+        return None
+        
+    db_account.is_active = is_active
+    db_account.updated_at = datetime.utcnow()
     db_customer.updated_at = datetime.utcnow()
+    
     db.commit()
     db.refresh(db_customer)
     return db_customer

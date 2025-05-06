@@ -111,20 +111,20 @@
                 // ตรวจสอบเงื่อนไขบทบาท
                 if (
                     data.status === 'success' &&
-                    data.role.role_name === 'employee' &&
+                    data.role == 1 &&
                     data.is_active === true
                 ) {
 
-                    if (data.position.position_name === 'packing') {
+                    if (data.position == 4) {
                         document.getElementById('packing-dashboard').classList.remove('hidden');
                         console.log('✅ Packing Dashboard Visible');
-                    } else if (data.position.position_name === 'preparation') {
+                    } else if (data.position == 3) {
                         document.getElementById('preparation-dashboard').classList.remove('hidden');
                         console.log('✅ Preparation Dashboard Visible');
-                    } else if (data.position.position_name === 'admin') {
+                    } else if (data.position == 2) {
                         document.getElementById('admin-dashboard').classList.remove('hidden');
                         console.log('✅ Admin Dashboard Visible');
-                    } else if (data.position.position_name === 'executive') {
+                    } else if (data.position == 1) {
                         document.getElementById('executive-dashboard').classList.remove('hidden');
                         console.log('✅ Executive Dashboard Visible');
                     }
