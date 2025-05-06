@@ -5,16 +5,17 @@ import json
 from fastapi import APIRouter, Request, Depends,HTTPException, File, UploadFile, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from typing import Optional,Dict
+from typing import Optional, Dict, Union
 from datetime import datetime
 
 from sqlalchemy.orm import Session
 
 import os
 from app.database import get_db
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user, get_current_user_or_customer
 from app.models.order import Order
 from app.models.user import User
+from app.models.customer import Customer
 from app.schemas.user import UserOut
 from app.models.product import Product
 from app.utils.product_categories import get_product_category, CATEGORIES
@@ -47,10 +48,11 @@ router = APIRouter(tags=["HTML"])
 def get_homepage(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: Optional[Union[User, Customer]] = Depends(get_current_user_or_customer)
 ):
     """
     แสดงหน้าแรก พร้อมสินค้าทั้งหมดและหมวดหมู่
+    สนับสนุนทั้งลูกค้าและพนักงาน
     """
     # ดึงสินค้าทั้งหมดจากฐานข้อมูล
     products = db.query(Product).all()
@@ -86,10 +88,11 @@ def get_products_by_category(
     request: Request,
     category: str,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    current_user: Optional[Union[User, Customer]] = Depends(get_current_user_or_customer)
 ):
     """
     แสดงสินค้าตามประเภทที่เลือก
+    สนับสนุนทั้งลูกค้าและพนักงาน
     """
     # ตรวจสอบว่าประเภทที่ส่งมาถูกต้องหรือไม่
     if category not in CATEGORIES and category != "all":
@@ -134,10 +137,10 @@ async def favicon():
 @router.get("/cart", response_class=HTMLResponse)
 def get_cart_page(
     request: Request,
-    current_user: Optional[UserOut] = Depends(get_current_user)
+    current_user: Optional[Union[User, Customer]] = Depends(get_current_user_or_customer)
 ):
     """
-    แสดงหน้าตะกร้าสินค้า
+    แสดงหน้าตะกร้าสินค้า (รองรับทั้งลูกค้าและพนักงาน)
     """
     return templates.TemplateResponse(
         "cart.html", 
@@ -157,13 +160,58 @@ async def checkout(
     province: str = Form(...),
     postal_code: str = Form(...),
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user)
+    request: Request = None
 ):
     """
     สั่งซื้อสินค้า พร้อมแนบสลิปการโอนเงิน และบันทึกในฐานข้อมูล
+    รองรับทั้งลูกค้าและพนักงาน
     """
-    if not current_user:
+    from app.services.auth import get_current_actor
+    from app.models.customer import Customer
+    
+    # ดึงข้อมูลผู้ใช้ปัจจุบัน (ลูกค้าหรือพนักงาน)
+    current_actor = get_current_actor(request, db)
+    
+    if not current_actor:
         raise HTTPException(status_code=401, detail="❌ คุณต้องล็อกอินก่อนทำการสั่งซื้อ")
+    
+    # ตรวจสอบว่าเป็น Customer หรือ User
+    is_customer = isinstance(current_actor, Customer)
+
+    # ดึงหรือสร้างข้อมูลลูกค้า (ถ้าเป็นพนักงานที่สั่งซื้อจะต้องมีข้อมูลลูกค้า)
+    customer_id = None
+    if is_customer:
+        # ถ้าเป็นลูกค้าอยู่แล้ว ใช้ ID ของลูกค้านั้น
+        customer_id = current_actor.id
+        # อัปเดตข้อมูลลูกค้า
+        current_actor.name = fullname
+        current_actor.phone = phone
+    else:
+        # ถ้าเป็นพนักงาน ต้องสร้างลูกค้าชั่วคราวและเชื่อมโยงกับพนักงาน
+        # หรือตรวจสอบว่ามีข้อมูลลูกค้าที่เชื่อมโยงกับพนักงานคนนี้หรือไม่
+        customer = db.query(Customer).filter(Customer.email == current_actor.email).first()
+        if not customer:
+            # สร้างลูกค้าใหม่จากข้อมูลพนักงาน
+            from app.crud.customer import create_customer
+            from app.schemas.customer import CustomerCreate
+            
+            customer_data = CustomerCreate(
+                email=current_actor.email,
+                password=current_actor.password,  # ใช้รหัสผ่านเดียวกับพนักงาน
+                name=fullname,
+                phone=phone,
+                is_active=True
+            )
+            try:
+                customer = create_customer(db=db, customer=customer_data)
+                customer_id = customer.id
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"❌ ไม่สามารถสร้างข้อมูลลูกค้าได้: {str(e)}")
+        else:
+            customer_id = customer.id
+            # อัปเดตข้อมูลลูกค้า
+            customer.name = fullname
+            customer.phone = phone
 
     try:
         cart_data = json.loads(cart)
@@ -180,31 +228,27 @@ async def checkout(
     if payment_slip.size > 15 * 1024 * 1024:  # 15MB
         raise HTTPException(status_code=400, detail="❌ ขนาดไฟล์ต้องไม่เกิน 15MB")
 
-    # อัพเดทข้อมูลผู้ใช้
-    user = db.query(User).filter(User.email == current_user.email).first()
-    if user:
-        user.name = fullname
-        user.phone = phone
-        
-        # สร้างหรืออัพเดทที่อยู่
-        from app.models.address import Address
-        address = db.query(Address).filter(Address.user_id == user.id).first()
-        if not address:
-            address = Address(user_id=user.id)
-            db.add(address)
-        
-        # อัพเดทข้อมูลที่อยู่
-        address.house_number = house_number
-        address.village_no = village_no
-        address.subdistrict = subdistrict
-        address.district = district
-        address.province = province
-        address.postal_code = postal_code
-        
-        db.commit()
+    # อัพเดทข้อมูลที่อยู่ตามประเภทของผู้ใช้
+    from app.models.address import Address
+    
+    # สร้างหรืออัพเดทที่อยู่ของลูกค้า
+    address = db.query(Address).filter(Address.customer_id == customer_id).first()
+    if not address:
+        address = Address(customer_id=customer_id)
+        db.add(address)
+    
+    # อัพเดทข้อมูลที่อยู่
+    address.house_number = house_number
+    address.village_no = village_no
+    address.subdistrict = subdistrict
+    address.district = district
+    address.province = province
+    address.postal_code = postal_code
+    
+    db.commit()
 
     # บันทึกไฟล์สลิปการโอนเงิน
-    slip_filename = f"{current_user.email}_{payment_slip.filename}"
+    slip_filename = f"{current_actor.email}_{payment_slip.filename}"
     slip_path = os.path.join(UPLOAD_DIR, slip_filename)
 
     with open(slip_path, "wb") as buffer:
@@ -212,7 +256,7 @@ async def checkout(
 
     # สร้างรายการออเดอร์ใหม่
     new_order = Order(
-        user_id=current_user.id,
+        customer_id=customer_id,
         total=cart_data['cart_total'],
         status="pending",
         slip_path=slip_path,
@@ -240,14 +284,14 @@ async def checkout(
     db.refresh(new_order)
 
     print("🛒 **บันทึกออเดอร์ใหม่ในฐานข้อมูล**")
-    print(f"📧 อีเมลผู้สั่งซื้อ: {current_user.email}")
+    print(f"📧 อีเมลผู้สั่งซื้อ: {current_actor.email}")
     print(f"💵 ราคารวมทั้งหมด: ฿{cart_data['cart_total']}")
     print(f"🖼️ สลิปการโอนเงิน: {slip_path}")
 
     return JSONResponse(content={
         "message": "✅ สั่งซื้อสำเร็จ!",
         "order_id": new_order.order_id,
-        "user_email": current_user.email,
+        "user_email": current_actor.email,
         "cart_total": cart_data['cart_total'],
         "slip_path": slip_path
     })
@@ -273,10 +317,10 @@ def logout():
 @router.get("/my-orders", response_class=HTMLResponse)
 def get_my_orders_page(
     request: Request,
-    current_user: Optional[UserOut] = Depends(get_current_user)
+    current_user: Optional[Union[User, Customer]] = Depends(get_current_user_or_customer)
 ):
     """
-    แสดงหน้าคำสั่งซื้อของฉัน
+    แสดงหน้าคำสั่งซื้อของฉัน (รองรับทั้งลูกค้าและพนักงาน)
     """
     return templates.TemplateResponse(
         "my_orders.html",

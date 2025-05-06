@@ -631,3 +631,114 @@ async def delete_camera(
     if not camera_crud.delete_camera(db, camera_id):
         raise HTTPException(status_code=404, detail="ไม่พบกล้องที่ต้องการ")
     return {"status": "success", "message": "ลบกล้องเรียบร้อยแล้ว"}
+
+# สร้าง Router สำหรับจัดการข้อมูลลูกค้าจากฝั่งแอดมิน
+@router.get("/customers", response_class=JSONResponse)
+def get_all_customers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ✅ ดึงข้อมูลลูกค้าทั้งหมดสำหรับแสดงในหน้า admin
+    """
+    from app.models.customer import Customer
+    from app.models.address import Address
+    
+    # ดึงข้อมูลลูกค้าทั้งหมดพร้อม relationship
+    customers = db.query(Customer).all()
+    customer_list = []
+    
+    for customer in customers:
+        customer_data = {
+            "id": customer.id,
+            "email": customer.email,
+            "name": customer.name,
+            "phone": customer.phone,
+            "created_at": customer.created_at,
+            "is_active": customer.is_active,
+            "addresses": []
+        }
+        
+        # ดึงข้อมูลที่อยู่ของลูกค้า
+        for address in customer.addresses:
+            address_data = {
+                "id": address.id,
+                "house_number": address.house_number,
+                "village_no": address.village_no,
+                "subdistrict": address.subdistrict,
+                "district": address.district,
+                "province": address.province,
+                "postal_code": address.postal_code
+            }
+            customer_data["addresses"].append(address_data)
+            
+        customer_list.append(customer_data)
+    
+    return customer_list
+
+@router.put("/customers/{customer_id}/activate", response_class=JSONResponse)
+def activate_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ✅ เปิดใช้งานบัญชีลูกค้า
+    """
+    from app.crud.customer import update_customer_status, get_customer_by_id
+    
+    db_customer = get_customer_by_id(db=db, customer_id=customer_id)
+    if not db_customer:
+        raise HTTPException(status_code=404, detail="❌ ไม่พบข้อมูลลูกค้า")
+    
+    result = update_customer_status(db=db, customer_id=customer_id, is_active=True)
+    return {"message": f"✅ เปิดใช้งานบัญชีลูกค้า {result.email} สำเร็จ"}
+
+@router.put("/customers/{customer_id}/deactivate", response_class=JSONResponse)
+def deactivate_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ✅ ปิดใช้งานบัญชีลูกค้า
+    """
+    from app.crud.customer import update_customer_status, get_customer_by_id
+    
+    db_customer = get_customer_by_id(db=db, customer_id=customer_id)
+    if not db_customer:
+        raise HTTPException(status_code=404, detail="❌ ไม่พบข้อมูลลูกค้า")
+    
+    result = update_customer_status(db=db, customer_id=customer_id, is_active=False)
+    return {"message": f"✅ ปิดใช้งานบัญชีลูกค้า {result.email} สำเร็จ"}
+
+@router.delete("/customers/{customer_id}", response_class=JSONResponse)
+def delete_customer(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ✅ ลบบัญชีลูกค้า
+    """
+    from app.crud.customer import delete_customer, get_customer_by_id
+    
+    db_customer = get_customer_by_id(db=db, customer_id=customer_id)
+    if not db_customer:
+        raise HTTPException(status_code=404, detail="❌ ไม่พบข้อมูลลูกค้า")
+    
+    email = db_customer.email
+    delete_customer(db=db, customer_id=customer_id)
+    return {"message": f"✅ ลบบัญชีลูกค้า {email} สำเร็จ"}
+
+# Route สำหรับแสดงหน้าจัดการลูกค้า
+@router.get("/customer-management", response_class=HTMLResponse)
+def get_customer_management(
+    request: Request,
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    แสดงหน้าจัดการลูกค้า (สำหรับแอดมิน)
+    """
+    print(f"🛡️ Customer Management Access by: {current_user.email}")
+    return templates.TemplateResponse("admin_customers.html", {"request": request, "current_user": current_user})

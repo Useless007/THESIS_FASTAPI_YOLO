@@ -41,6 +41,14 @@ admin_router = APIRouter(
 )
 protected_router = APIRouter(tags=["Auth"])
 
+# สร้าง Routers ใหม่สำหรับการลงทะเบียนของลูกค้าและพนักงาน
+customer_router = APIRouter(prefix="/customer", tags=["Customer Registration"])
+employee_router = APIRouter(prefix="/employee", tags=["Employee Registration"])
+
+# เพิ่ม customer_router และ employee_router เข้ากับ router หลัก
+router.include_router(customer_router)
+router.include_router(employee_router)
+
 # ---------------------------------------------------------------------
 # AUTH ENDPOINTS
 # ---------------------------------------------------------------------
@@ -62,27 +70,64 @@ def authenticate_user_and_generate_token(
 ):
     """
     ตรวจสอบข้อมูลการเข้าสู่ระบบและส่ง Token กลับ
+    ตรวจสอบทั้ง User (พนักงาน) และ Customer (ลูกค้า)
     """
+    # ตรวจสอบใน User table (พนักงาน) ก่อน
     user = db.query(User).filter(User.email == username).first()
     
+    # ถ้าไม่พบในตาราง User ให้ตรวจสอบใน Customer table
+    customer = None
+    is_customer = False
+    
     if not user or not verify_password(password, user.password):
-        # หาก username หรือ password ไม่ถูกต้อง
+        # ไม่พบพนักงาน หรือ password ไม่ถูกต้อง ให้ตรวจสอบในตาราง Customer
+        from app.models.customer import Customer
+        customer = db.query(Customer).filter(Customer.email == username).first()
+        
+        if not customer or not verify_password(password, customer.password):
+            # ไม่พบทั้งใน User และ Customer หรือ password ไม่ถูกต้อง
+            return templates.TemplateResponse(
+                "login.html",
+                {
+                    "request": request,
+                    "message": "❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+                    "message_color": "red"
+                }
+            )
+        is_customer = True
+    
+    # ตรวจสอบสถานะการใช้งานของพนักงาน
+    if not is_customer and not user.is_active:
+        # พนักงานยังไม่ได้รับการอนุมัติ
         return templates.TemplateResponse(
             "login.html",
             {
                 "request": request,
-                "message": "❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+                "message": "❌ บัญชีของคุณยังไม่ได้รับการอนุมัติจากแอดมิน",
+                "message_color": "red"
+            }
+        )
+        
+    # ตรวจสอบสถานะการใช้งานของลูกค้า
+    if is_customer and not customer.is_active:
+        # ลูกค้ายังไม่ได้รับการอนุมัติ
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "message": "❌ บัญชีของคุณยังไม่ได้รับการอนุมัติ",
                 "message_color": "red"
             }
         )
 
-    # หากตรวจสอบผ่าน สร้าง Token
-    access_token = create_access_token(data={"sub": user.email})
+    # สร้าง Token สำหรับผู้ใช้
+    authenticated_email = customer.email if is_customer else user.email
+    access_token = create_access_token(data={"sub": authenticated_email}, is_customer=is_customer)
+    
     response = RedirectResponse(url="/", status_code=303)
     response.set_cookie(
         key="Authorization",
         value=f"Bearer {access_token}",
-        # domain=".jintaphas.tech", # อนุญาตให้ทุก subdomain ใช้ Cookies ได้
         httponly=False,  # False เพื่อให้ JavaScript อ่านได้
         secure=False,   # เปลี่ยนเป็น True บน HTTPS
         samesite="Lax",
@@ -115,6 +160,13 @@ def get_register_form(request: Request):
     """
     return templates.TemplateResponse("register.html", {"request": request})
 
+@protected_router.get("/employee-register", response_class=HTMLResponse)
+def get_employee_register_form(request: Request):
+    """
+    แสดงหน้าลงทะเบียนพนักงาน
+    """
+    return templates.TemplateResponse("register_employee.html", {"request": request})
+
 @protected_router.get("/settings", response_class=HTMLResponse, tags=["HTML"])
 def get_register_form(request: Request, current_user: User = Depends(get_current_user)):
     """
@@ -124,38 +176,45 @@ def get_register_form(request: Request, current_user: User = Depends(get_current
 
 
 @protected_router.post("/register", response_class=HTMLResponse)
-def post_register_form(
+def post_customer_register_form(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
     name: str = Form(...),
+    phone: str = Form(None),
     db: Session = Depends(get_db),
 ):
     """
-    รับข้อมูลจากฟอร์มและสร้างผู้ใช้ใหม่ในฐานข้อมูล พร้อมเข้าสู่ระบบอัตโนมัติ
+    รับข้อมูลจากฟอร์มและสร้างลูกค้าใหม่ในฐานข้อมูล พร้อมเข้าสู่ระบบอัตโนมัติและเปลี่ยนเส้นทางไปที่หน้าหลัก
+    ลูกค้าสามารถเข้าสู่ระบบได้ทันทีโดยไม่ต้องรอการอนุมัติ
     """
-    user_data = UserCreate(
+    from app.crud.customer import create_customer
+    from app.schemas.customer import CustomerCreate
+    
+    customer_data = CustomerCreate(
         email=email,
         password=password,
         name=name,
-        role_id=2,  # 2 = customer
-        is_active=False
+        phone=phone,
+        is_active=True  # ตั้งค่าให้ลูกค้าเป็น active ทันที
     )
     try:
-        # สร้างผู้ใช้ใหม่
-        create_user(db=db, user=user_data)
-
-        # สร้าง JWT Token สำหรับผู้ใช้ที่ลงทะเบียนสำเร็จ
-        access_token = create_access_token(data={"sub": email})
-
-        # ตั้งค่า Cookie พร้อม Redirect ไปหน้า Home
+        # สร้างลูกค้าใหม่
+        db_customer = create_customer(db=db, customer=customer_data)
+        
+        # สร้าง Token สำหรับลูกค้า (ไม่ต้องใช้บทบาทเพิ่มเติม)
+        token_data = {"sub": email}
+        token = create_access_token(token_data, is_customer=True)  # ระบุว่าเป็น customer
+        
+        # สร้าง Response เป็น redirect ไปหน้าหลัก
         response = RedirectResponse(url="/", status_code=303)
+        
+        # เพิ่ม cookie สำหรับ Authorization
         response.set_cookie(
             key="Authorization",
-            value=f"Bearer {access_token}",
-            # domain=".jintaphas.tech", # อนุญาตให้ทุก subdomain ใช้ Cookies ได้
+            value=f"Bearer {token}",
             httponly=False,  # False เพื่อให้ JavaScript อ่านได้
-            secure=False,   # True ถ้าใช้ HTTPS
+            secure=False,    # เปลี่ยนเป็น True บน HTTPS
             samesite="Lax",
             max_age=3600,
             path="/"  # ✅ สำคัญ: ให้ Cookie มีผลกับทุกเส้นทาง
@@ -166,18 +225,62 @@ def post_register_form(
         if "Duplicate entry" in str(e.orig):
             message = "❌ Email นี้มีอยู่ในระบบแล้ว"
         else:
-            message = f"❌ Registration failed due to a database error: {str(e)}"
-        message_color = "red"
-    except Exception as e:
-        message = f"❌ Registration failed due to an unexpected error: {str(e)}"
-        message_color = "red"
+            message = f"❌ เกิดข้อผิดพลาด: {str(e.orig)}"
+            
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "error": message}
+        )
 
-    return templates.TemplateResponse(
-        "register.html", 
-        {"request": request, "message": message, "message_color": message_color}
+@protected_router.post("/employee-register", response_class=HTMLResponse)
+def post_employee_register_form(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    name: str = Form(...),
+    phone: str = Form(None),
+    db: Session = Depends(get_db),
+):
+    """
+    รับข้อมูลจากฟอร์มและสร้างพนักงานใหม่ในฐานข้อมูล
+    พนักงานต้องรอการอนุมัติจากแอดมินก่อนเข้าสู่ระบบได้
+    """
+    from app.crud.user import create_user
+    from app.schemas.user import UserCreate
+    
+    user_data = UserCreate(
+        email=email,
+        password=password,
+        name=name,
+        phone=phone,
+        role_id=1,  # 1 = employee
+        is_active=False  # เริ่มต้นเป็น inactive รอการอนุมัติ
     )
-    
-    
+    try:
+        # สร้างพนักงานใหม่
+        db_user = create_user(db=db, user=user_data)
+        
+        # ส่งกลับหน้ารอการอนุมัติจากแอดมิน
+        return templates.TemplateResponse(
+            "register_employee_success.html",
+            {
+                "request": request, 
+                "message": "✅ ลงทะเบียนสำเร็จ กรุณารอการอนุมัติจากแอดมินก่อนเข้าสู่ระบบ", 
+                "name": name
+            }
+        )
+
+    except IntegrityError as e:
+        if "Duplicate entry" in str(e.orig):
+            message = "❌ Email นี้มีอยู่ในระบบแล้ว"
+        else:
+            message = f"❌ เกิดข้อผิดพลาด: {str(e.orig)}"
+            
+        return templates.TemplateResponse(
+            "register_employee.html",
+            {"request": request, "error": message}
+        )
+
 @protected_router.get("/role-check", tags=["Auth"])
 def check_user_role(
     role: Optional[str] = None,
@@ -225,28 +328,62 @@ def check_user_role(
 # ---------------------------------------------------------------------
 
 @router.get("/profile")
-def get_user_profile(current_user: User = Depends(get_current_user)):
-    # ดึงข้อมูลที่อยู่จาก relationship ถ้ามี
+def get_user_profile(request: Request, db: Session = Depends(get_db)):
+    """
+    ดึงข้อมูลโปรไฟล์ของผู้ใช้ทั้งลูกค้าและพนักงาน
+    """
+    from app.services.auth import get_current_actor
+    from app.models.customer import Customer
+    
+    # ดึงข้อมูลผู้ใช้ปัจจุบัน (ทั้งลูกค้าและพนักงาน)
+    current_actor = get_current_actor(request, db)
+    
+    if not current_actor:
+        raise HTTPException(status_code=401, detail="ไม่พบข้อมูลผู้ใช้")
+    
+    # ตรวจสอบว่าเป็น Customer หรือ User
+    is_customer = isinstance(current_actor, Customer)
+    
     address_info = None
-    if current_user.addresses:
-        # ดึงที่อยู่แรกจาก list (ถ้ามีหลายที่อยู่)
-        address = current_user.addresses[0]
-        address_info = {
-            "house_number": address.house_number,
-            "village_no": address.village_no,
-            "subdistrict": address.subdistrict,
-            "district": address.district,
-            "province": address.province,
-            "postal_code": address.postal_code,
-            "full_address": f"{address.house_number} หมู่ {address.village_no} ต.{address.subdistrict} อ.{address.district} จ.{address.province} {address.postal_code}"
-        }
+    
+    # ดึงข้อมูลที่อยู่ตามประเภทของผู้ใช้
+    if is_customer:
+        # ดึงที่อยู่ของลูกค้า
+        from app.models.address import Address
+        address = db.query(Address).filter(Address.customer_id == current_actor.id).first()
+        
+        if address:
+            address_info = {
+                "house_number": address.house_number,
+                "village_no": address.village_no,
+                "subdistrict": address.subdistrict,
+                "district": address.district,
+                "province": address.province,
+                "postal_code": address.postal_code,
+                "full_address": f"{address.house_number} หมู่ {address.village_no} ต.{address.subdistrict} อ.{address.district} จ.{address.province} {address.postal_code}"
+            }
+    else:
+        # ดึงที่อยู่ของพนักงาน (User)
+        if hasattr(current_actor, 'addresses') and current_actor.addresses:
+            # ดึงที่อยู่แรกจาก list (ถ้ามีหลายที่อยู่)
+            address = current_actor.addresses[0]
+            address_info = {
+                "house_number": address.house_number,
+                "village_no": address.village_no,
+                "subdistrict": address.subdistrict,
+                "district": address.district,
+                "province": address.province,
+                "postal_code": address.postal_code,
+                "full_address": f"{address.house_number} หมู่ {address.village_no} ต.{address.subdistrict} อ.{address.district} จ.{address.province} {address.postal_code}"
+            }
     
     return {
-        "name": current_user.name,
-        "phone": current_user.phone,
-        "address": address_info  # ส่งข้อมูลที่อยู่แบบ object
+        "name": current_actor.name,
+        "email": current_actor.email,
+        "phone": current_actor.phone,
+        "address": address_info,  # ส่งข้อมูลที่อยู่แบบ object
+        "is_customer": is_customer
     }
-
 
 
 @router.post("/", response_model=UserOut)

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>ลงทะเบียนลูกค้าสำเร็จ</title>
+</head>
+
+<body class="bg-gray-100">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+            <div class="text-center">
+                <svg class="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <h2 class="mt-2 text-2xl font-bold text-gray-900">ลงทะเบียนสำเร็จ</h2>
+                <p class="mt-2 text-gray-600">
+                    สวัสดี {{ name }} คุณได้ลงทะเบียนเป็นลูกค้าเรียบร้อยแล้ว
+                </p>
+                <p class="mt-2 text-sm text-gray-500">
+                    คุณสามารถเข้าสู่ระบบและเริ่มช้อปปิ้งได้ทันที
+                </p>
+            </div>
+
+            <div class="mt-6">
+                <a href="/login"
+                    class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    กลับไปหน้าเข้าสู่ระบบ
+                </a>
+            </div>
+
+            <div class="mt-6 text-center">
+                <a href="/" class="text-sm text-indigo-600 hover:text-indigo-500">กลับไปหน้าหลัก</a>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

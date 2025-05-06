@@ -151,8 +151,12 @@ def detect_frame(frame, device='cuda:0'):
             print("❌ Invalid frame for detection")
             return []
         
+        # สร้าง temp directory ถ้ายังไม่มี
+        temp_dir = "uploads/temp_realtime"
+        os.makedirs(temp_dir, exist_ok=True)
+        
         # สร้างชื่อไฟล์ชั่วคราวที่ไม่ซ้ำกัน
-        temp_path = f"temp_frame_{time.time()}.jpg"
+        temp_path = os.path.join(temp_dir, f"temp_frame_{time.time()}.jpg")
         
         # บันทึกภาพลงไฟล์ชั่วคราว
         cv2.imwrite(temp_path, frame)
@@ -308,7 +312,7 @@ async def realtime_detect(
         try:
             # เก็บเฟรมล่าสุดที่ทำการตรวจจับแล้ว
             last_detection_time = 0
-            detection_interval = 0.2  # ทำการตรวจจับทุก 0.2 วินาที (5 FPS สำหรับการตรวจจับ)
+            detection_interval = 2.0  # ทำการตรวจจับทุก 2 วินาที (0.5 FPS สำหรับการตรวจจับ)
             
             # กรอบตรวจจับล่าสุด (ใช้วาดบนเฟรมใหม่)
             last_detections = []

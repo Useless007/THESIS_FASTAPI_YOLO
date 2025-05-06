@@ -1,10 +1,10 @@
-# app/schemas/user.py
+# app/schemas/customer.py
 
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
 
-class UserBase(BaseModel):
+class CustomerBase(BaseModel):
     id: int
     email: str
     name: str
@@ -12,48 +12,26 @@ class UserBase(BaseModel):
     class Config:
         from_attributes = True
 
-# Schema สำหรับการสร้าง User
-class UserCreate(BaseModel):
+class CustomerCreate(BaseModel):
     email: str
     password: str
     name: str
-    role_id: int = Field(default=1)  # Default role_id: 1 (employee)
-    position_id: Optional[int] = None
     phone: Optional[str] = None
     is_active: bool = Field(default=False)
 
     class Config:
         from_attributes = True
 
-# Schema สำหรับการอัปเดต User
-class UserUpdate(BaseModel):
+class CustomerUpdate(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
     name: Optional[str] = None
-    role_id: Optional[int] = None
-    position_id: Optional[int] = None
     phone: Optional[str] = None
     is_active: Optional[bool] = None
 
     class Config:
         from_attributes = True
 
-# Schema สำหรับ Role กับ Position ที่จะแสดงร่วมกับ User
-class RoleBase(BaseModel):
-    role_id: int
-    role_name: str
-
-    class Config:
-        from_attributes = True
-
-class PositionBase(BaseModel):
-    position_id: int
-    position_name: str
-
-    class Config:
-        from_attributes = True
-
-# Schema สำหรับที่อยู่
 class AddressBase(BaseModel):
     id: int
     house_number: Optional[str] = None
@@ -66,13 +44,10 @@ class AddressBase(BaseModel):
     class Config:
         from_attributes = True
 
-# Schema สำหรับการแสดงข้อมูล User
-class UserOut(BaseModel):
+class CustomerOut(BaseModel):
     id: int
     email: str
     name: str
-    role: RoleBase
-    position: Optional[PositionBase] = None
     phone: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -81,8 +56,3 @@ class UserOut(BaseModel):
 
     class Config:
         from_attributes = True
-
-# Schema สำหรับ Authentication
-class TokenData(BaseModel):
-    email: Optional[str] = None
-    is_customer: Optional[bool] = None

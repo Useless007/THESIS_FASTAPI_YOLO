@@ -4,9 +4,11 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from app.database import Base, engine, SessionLocal
 from app.models.address import Address
 from app.models.camera import Camera
+from app.models.customer import Customer
 from app.models.order_item import OrderItem
 from app.models.order import Order
 from app.models.position import Position
@@ -239,6 +241,7 @@ def init_db():
                 is_active=True
             )
             db.add(executive_user)
+            db.flush()  # ให้ flush ก่อนเพื่อให้ได้ ID ที่ถูกต้อง
             print("➕ สร้างบัญชี Executive เรียบร้อยแล้ว")
             db.commit()
         
@@ -257,6 +260,7 @@ def init_db():
                 is_active=True
             )
             db.add(admin_user)
+            db.flush()  # ให้ flush ก่อนเพื่อให้ได้ ID ที่ถูกต้อง
             print("➕ สร้างบัญชี Admin เรียบร้อยแล้ว")
             db.commit()
 
@@ -275,6 +279,7 @@ def init_db():
                 is_active=True
             )
             db.add(preparation_user)
+            db.flush()  # ให้ flush ก่อนเพื่อให้ได้ ID ที่ถูกต้อง
             print("➕ สร้างบัญชี Preparation Staff เรียบร้อยแล้ว")
             db.commit()
             
@@ -293,9 +298,63 @@ def init_db():
                 is_active=True
             )
             db.add(packing_user)
+            db.flush()  # ให้ flush ก่อนเพื่อให้ได้ ID ที่ถูกต้อง
             print("➕ สร้างบัญชี Packing Staff เรียบร้อยแล้ว")
             db.commit()
 
+        # ✅ สร้างบัญชี customer หลายบัญชี
+        customers_data = [
+            {
+                "email": "customer1@example.com",
+                "password": hash_password("customer1234"),
+                "name": "ลูกค้า คนที่หนึ่ง",
+                "phone": "0891234567",
+                "created_at": datetime.now(),
+                "is_active": True
+            },
+            {
+                "email": "customer2@example.com",
+                "password": hash_password("customer1234"),
+                "name": "ลูกค้า คนที่สอง",
+                "phone": "0891234566",
+                "created_at": datetime.now(),
+                "is_active": True
+            },
+            {
+                "email": "customer3@example.com",
+                "password": hash_password("customer1234"),
+                "name": "ลูกค้า คนที่สาม",
+                "phone": "0891234565",
+                "created_at": datetime.now(),
+                "is_active": False  # ยังไม่ได้รับการอนุมัติ
+            }
+        ]
+        
+        for customer_data in customers_data:
+            # ตรวจสอบว่ามีลูกค้านี้ในฐานข้อมูลแล้วหรือไม่
+            customer = db.query(Customer).filter(Customer.email == customer_data["email"]).first()
+            if not customer:
+                customer = Customer(**customer_data)
+                db.add(customer)
+                db.flush()  # ให้ flush ก่อนเพื่อให้ได้ ID ที่ถูกต้อง
+                print(f"➕ สร้างบัญชีลูกค้า: {customer_data['email']} เรียบร้อยแล้ว")
+            
+                # เพิ่มที่อยู่ให้กับลูกค้าทันทีหลังจากสร้างบัญชี
+                if customer.email == "customer1@example.com":
+                    address1 = Address(
+                        customer_id=customer.id,
+                        house_number="123/45",
+                        village_no="5",
+                        subdistrict="สุเทพ",
+                        district="เมือง",
+                        province="เชียงใหม่",
+                        postal_code="50200"
+                    )
+                    db.add(address1)
+                    print(f"➕ เพิ่มที่อยู่ให้กับลูกค้า: {customer.email} เรียบร้อยแล้ว")
+        
+        db.commit()
+        
         # ✅ เพิ่มข้อมูลกล้อง
         cameras_data = [
             {
