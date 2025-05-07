@@ -3,8 +3,8 @@
 from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor
 import asyncio
 import requests
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response, Request, Form
-from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response, Request, Form, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse, HTMLResponse
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 from app.models.user import User
@@ -15,8 +15,10 @@ from app.models.product import Product
 from app.schemas.order import VerifyRequest
 from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
 from app.database import get_db
-import subprocess,json,shutil,torch,os,cv2,traceback,threading,time
+import subprocess,json,shutil,torch,os,cv2,traceback,threading,time,re,base64
+import numpy as np
 from ultralytics import YOLO
+from fastapi.templating import Jinja2Templates
 
 router = APIRouter(prefix="/packing", tags=["Packing Staff"])
 stream_lock = asyncio.Lock()  # Lock เพื่อจัดการการเข้าถึง Stream
@@ -334,49 +336,270 @@ async def realtime_detect(
                 current_time = time.time()
                 should_detect = (current_time - last_detection_time) >= detection_interval
                 
-                # ทำการตรวจจับเฉพาะเมื่อถึงเวลา
                 if should_detect:
                     last_detection_time = current_time
                     
-                    # ทำการตรวจจับวัตถุด้วย YOLO โดยตรง (ไม่ผ่าน subprocess)
                     try:
-                        # ใช้ ThreadPool เพื่อไม่ให้บล็อค event loop
-                        loop = asyncio.get_running_loop()
+                        # ตรวจสอบความถูกต้องของเฟรม
+                        if frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:
+                            print(f"⚠️ Invalid frame received from camera {camera_id}")
+                            await asyncio.sleep(0.01)
+                            continue
                         
-                        # ทำการตรวจจับโดยตรงจากเฟรม (ไม่ต้องบันทึกไฟล์)
-                        # แปลงเฟรมเป็น numpy array เพื่อใช้กับ YOLO
-                        detections = await loop.run_in_executor(
-                            get_executor(),
-                            detect_frame,
-                            frame.copy(),  # ส่งสำเนาของเฟรมไปเพื่อความปลอดภัย
-                            device
-                        )
+                        try:
+                            # ทำสำเนาเฟรมก่อนนำไปประมวลผล
+                            frame_copy = frame.copy()
+                            
+                            # กำหนดตัวแปร detections ตั้งแต่ต้นเพื่อแก้ปัญหา "referenced before assignment"
+                            detections = []
+                            
+                            # ใช้ subprocess เรียก yolo_worker.py เพื่อตรวจจับวัตถุ
+                            # ซึ่งเป็นวิธีที่ทำงานได้จริงแล้วในฟังก์ชันอื่นๆ
+                            # จำเป็นต้องเขียนลงไฟล์ชั่วคราว แต่คุณสามารถลดขนาดรูปภาพลงเพื่อให้เร็วขึ้น
+                            
+                            # สร้าง temp directory ถ้ายังไม่มี
+                            temp_dir = "uploads/temp_realtime"
+                            os.makedirs(temp_dir, exist_ok=True)
+                            
+                            # ลดขนาดเฟรมลงเพื่อให้การเขียนไฟล์และตรวจจับเร็วขึ้น (ลดลงมากขึ้น)
+                            frame_resized = cv2.resize(frame_copy, (320, 240))
+                            
+                            # สร้างชื่อไฟล์ชั่วคราวที่ไม่ซ้ำกัน
+                            temp_path = os.path.join(temp_dir, f"temp_frame_{camera_id}_{time.time()}.jpg")
+                            
+                            # บันทึกภาพลงไฟล์ชั่วคราวด้วยคุณภาพต่ำเพื่อให้เร็วขึ้น
+                            cv2.imwrite(temp_path, frame_resized, [cv2.IMWRITE_JPEG_QUALITY, 50])
+                            
+                            # ใช้ subprocess เรียก yolo_worker.py ซึ่งทำงานได้แล้ว
+                            # เพิ่ม timeout เป็น 10 วินาที
+                            result = subprocess.run(
+                                ["python", "app/services/yolo_worker.py", temp_path],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                                timeout=10  # เพิ่ม timeout เป็น 10 วินาที
+                            )
+                            
+                            # ลบไฟล์ชั่วคราวทันที
+                            try:
+                                if os.path.exists(temp_path):
+                                    os.remove(temp_path)
+                            except Exception as e:
+                                print(f"⚠️ Warning: Failed to delete temporary file: {e}")
+                            
+                            if result.returncode != 0:
+                                print(f"❌ YOLO worker error: {result.stderr}")
+                                detections = []
+                            else:
+                                # แยก JSON จาก stdout
+                                try:
+                                    start_index = result.stdout.find("{")
+                                    end_index = result.stdout.rfind("}") + 1
+                                    if start_index == -1 or end_index == 0:
+                                        detections = []
+                                    else:
+                                        clean_json = result.stdout[start_index:end_index]
+                                        output = json.loads(clean_json)
+                                        detections = output.get("detections", [])
+                                except json.JSONDecodeError:
+                                    print("❌ Failed to decode YOLO worker response")
+                                    detections = []
+                                    
+                            # วาดกรอบรอบวัตถุที่ตรวจพบ
+                            for detection in detections:
+                                label = detection["label"]
+                                conf = detection["confidence"]
+                                box = detection["box"]
+                                
+                                x1, y1, x2, y2 = [int(float(coord)) for coord in box]
+                                
+                                # วาดกรอบ
+                                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                                
+                                # วาดข้อความแสดงชื่อและความเชื่อมั่น
+                                label_text = f"{label}: {conf:.2f}"
+                                cv2.putText(frame, label_text, (x1, y1 - 10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                         
-                        # เก็บผลการตรวจจับล่าสุดไว้
-                        last_detections = detections
+                        except Exception as e:
+                            print(f"❌ Error in detection: {str(e)}")
+                            traceback.print_exc()
+                        
+                        # แปลงภาพที่มีการวาดกรอบแล้วเป็น base64
+                        _, buffer = cv2.imencode('.jpg', frame)
+                        img_base64 = base64.b64encode(buffer).decode('utf-8')
+                        
+                        # ส่งผลลัพธ์กลับไปยัง client
+                        await websocket.send_json({
+                            "image": img_base64,
+                            "detections": detections,
+                            "count": len(detections)
+                        })
                         
                     except Exception as e:
-                        print(f"❌ Error in real-time detection: {str(e)}")
+                        print(f"❌ Error in detection: {str(e)}")
+                        traceback.print_exc()
                 
-                # วาดกรอบลงบนเฟรม (ทุกเฟรม ใช้ผลการตรวจจับล่าสุด)
-                if last_detections:
-                    frame = draw_detections(frame, last_detections)
-                
-                # แปลงเป็น JPEG เพื่อส่งไปแสดงผล
-                _, buffer = cv2.imencode('.jpg', frame)
-                yield (
-                    b'--frame\r\n'
-                    b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
-                )
-                
-                # หน่วงเวลาเพื่อไม่ให้ทำงานหนักเกินไป (ลดลงเพื่อให้การส่งภาพเร็วขึ้น)
-                await asyncio.sleep(0.03)  # ประมาณ 30 FPS สำหรับการส่งภาพ
+                # รอสักครู่เพื่อไม่ให้ใช้ CPU มากเกินไป
+                await asyncio.sleep(0.01)
                 
         except Exception as e:
             print(f"❌ Error streaming camera with detection {camera_id}: {e}")
         finally:
             # ปิดการตรวจจับแต่ไม่ปิดกล้อง
             detection_flags[camera_id] = False
+
+    return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
+
+# ✅ สตรีมวิดีโจากกล้องพร้อมการตรวจจับแบบ direct real-time (ไม่ใช้ WebSocket)
+@router.get("/realtime-detect-direct")
+async def realtime_detect_direct(
+    request: Request,
+    camera_id: int = Query(..., description="ID ของกล้องที่ต้องการสตรีมพร้อมตรวจจับ"),
+    token: str = Header(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+):
+    """
+    สตรีมวิดีโอจากกล้อง IP พร้อมการตรวจจับวัตถุแบบ real-time โดยตรงไม่ผ่าน WebSocket
+    ส่งภาพที่มีการวาดกรอบแล้วกลับไปยัง client เลย ทำให้ดูเหมือนสตรีมภาพปกติ
+    """
+    global video_captures, detection_flags
+    
+    # ดึงข้อมูลกล้องจาก DB
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    rtsp_link = camera.stream_url  # ดึง RTSP link จาก DB
+
+    # ตรวจสอบว่ากล้องถูกเปิดแล้วหรือยัง
+    if camera_id not in video_captures or not video_captures[camera_id].isOpened():
+        await start_camera(camera_id, rtsp_link)
+
+    # เตรียม model สำหรับการตรวจจับ
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    print(f"🔍 Running direct YOLO streaming on device: {device} for camera {camera_id}")
+    
+    # เริ่มตรวจจับ
+    detection_flags[camera_id] = True
+    
+    # ✅ ฟังก์ชันสร้าง Stream ที่มีการตรวจจับวัตถุแบบ direct
+    async def generate():
+        try:
+            # ตัวแปรสำหรับการตรวจจับทุกๆ X วินาที
+            last_detection_time = 0
+            detection_interval = 0.5  # ทำการตรวจจับทุก 0.5 วินาที (2 FPS)
+            last_detections = []  # เก็บผลการตรวจจับล่าสุด
+            
+            # ตั้งค่า temp directory
+            temp_dir = "uploads/temp_realtime"
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            while detection_flags.get(camera_id, True):
+                if camera_id not in video_captures or not video_captures[camera_id].isOpened():
+                    print(f"⚠️ กล้อง {camera_id} ถูกปิด")
+                    break
+                    
+                success, frame = video_captures[camera_id].read()
+                if not success:
+                    await asyncio.sleep(0.01)
+                    continue
+                
+                # ตรวจสอบว่าถึงเวลาตรวจจับหรือยัง
+                current_time = time.time()
+                should_detect = (current_time - last_detection_time) >= detection_interval
+                
+                try:
+                    # ถ้าถึงเวลาตรวจจับ
+                    if should_detect:
+                        last_detection_time = current_time
+                        
+                        # ทำสำเนาเฟรมเพื่อความปลอดภัย
+                        frame_copy = frame.copy()
+                        
+                        # ลดขนาดเฟรม
+                        frame_resized = cv2.resize(frame_copy, (320, 240))
+                        
+                        # ตรวจจับวัตถุด้วย yolo_worker.py ผ่าน subprocess
+                        temp_path = os.path.join(temp_dir, f"temp_frame_{camera_id}_{current_time}.jpg")
+                        cv2.imwrite(temp_path, frame_resized, [cv2.IMWRITE_JPEG_QUALITY, 50])
+                        
+                        try:
+                            result = subprocess.run(
+                                ["python", "app/services/yolo_worker.py", temp_path],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                                timeout=5  # timeout 5 วินาที
+                            )
+                            
+                            # ลบไฟล์ชั่วคราวทันที
+                            try:
+                                if os.path.exists(temp_path):
+                                    os.remove(temp_path)
+                            except:
+                                pass
+                                
+                            if result.returncode == 0:
+                                try:
+                                    # แยก JSON จาก stdout
+                                    start_index = result.stdout.find("{")
+                                    end_index = result.stdout.rfind("}") + 1
+                                    if start_index != -1 and end_index > 0:
+                                        clean_json = result.stdout[start_index:end_index]
+                                        output = json.loads(clean_json)
+                                        last_detections = output.get("detections", [])
+                                except:
+                                    # ถ้าแยก JSON ไม่ได้ ใช้ผลการตรวจจับล่าสุด
+                                    pass
+                        except subprocess.TimeoutExpired:
+                            # ถ้า timeout ให้ใช้ผลการตรวจจับล่าสุด
+                            print(f"⚠️ YOLO detection timeout for camera {camera_id}")
+                        except Exception as e:
+                            print(f"❌ Error in YOLO detection: {str(e)}")
+                    
+                    # วาดกรอบรอบวัตถุที่ตรวจพบ (ทั้งกรณีตรวจจับใหม่และใช้ผลลัพธ์เดิม)
+                    for detection in last_detections:
+                        label = detection["label"]
+                        conf = detection["confidence"]
+                        box = detection["box"]
+                        
+                        x1, y1, x2, y2 = [int(float(coord)) for coord in box]
+                        
+                        # วาดกรอบ
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        
+                        # วาดข้อความแสดงชื่อและความเชื่อมั่น
+                        label_text = f"{label}: {conf:.2f}"
+                        cv2.putText(frame, label_text, (x1, y1 - 10), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    
+                    # เพิ่มข้อความแสดงจำนวนวัตถุที่ตรวจพบ
+                    msg = f"พบวัตถุ: {len(last_detections)} ชิ้น"
+                    cv2.putText(frame, msg, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+                    
+                    # ส่งภาพที่มีการวาดกรอบแล้วกลับไปยัง client
+                    _, buffer = cv2.imencode('.jpg', frame)
+                    yield (
+                        b'--frame\r\n'
+                        b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
+                    )
+                    
+                except Exception as e:
+                    print(f"❌ Error in frame processing: {str(e)}")
+                    traceback.print_exc()
+                
+                # รอสักครู่เพื่อไม่ให้ใช้ CPU มากเกินไป
+                await asyncio.sleep(0.01)
+                
+        except Exception as e:
+            print(f"❌ Error in direct detection streaming: {str(e)}")
+            traceback.print_exc()
+        finally:
+            # หยุดการตรวจจับแต่ไม่ปิดกล้อง
+            detection_flags[camera_id] = False
+            print(f"🛑 Direct realtime detection stopped for camera {camera_id}")
 
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
 
@@ -776,3 +999,271 @@ def get_product_names(
     product_names = [product[0] for product in products]
     
     return JSONResponse(content={"product_names": product_names})
+
+# กำหนด template สำหรับหน้าเว็บ
+templates = Jinja2Templates(directory="app/templates")
+
+# ✅ WebSocket endpoint สำหรับการตรวจจับแบบ real-time จากเว็บแคม
+@router.websocket("/ws/webcam-detect")
+async def websocket_webcam_detect(websocket: WebSocket, token: str = None):
+    """
+    WebSocket endpoint สำหรับรับภาพจากเว็บแคมและส่งผลการตรวจจับกลับ
+    คล้ายกับที่ทำใน Flask แต่ใช้ WebSocket ซึ่งเร็วกว่า
+    """
+    await websocket.accept()
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    print(f"🔍 New WebSocket connection for webcam detection. Using device: {device}")
+    
+    try:
+        while True:
+            # รับข้อมูลภาพ (base64) จาก client
+            data = await websocket.receive_text()
+            try:
+                json_data = json.loads(data)
+                image_data = json_data.get("image")
+                
+                # แปลงจาก base64 -> OpenCV image
+                image_data = re.sub('^data:image/.+;base64,', '', image_data)
+                image_bytes = base64.b64decode(image_data)
+                np_arr = np.frombuffer(image_bytes, np.uint8)
+                img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                
+                if img is None or img.size == 0:
+                    await websocket.send_json({"error": "ไม่สามารถแปลงรูปภาพได้"})
+                    continue
+                
+                # ส่งภาพไปตรวจจับด้วย model
+                results = model(img, conf=0.3)
+                detections = []
+                
+                # วิเคราะห์ผลการตรวจจับ
+                for result in results:
+                    boxes = result.boxes
+                    for box in boxes.data:
+                        x1, y1, x2, y2, conf, cls = box.tolist()
+                        label = model.names[int(cls)]
+                        detections.append({
+                            "label": label,
+                            "confidence": float(conf),
+                            "box": [float(x1), float(y1), float(x2), float(y2)],
+                        })
+                        
+                        # วาดกรอบรอบวัตถุที่ตรวจพบ
+                        cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                        
+                        # วาดข้อความแสดงชื่อและความเชื่อมั่น
+                        label_text = f"{label}: {conf:.2f}"
+                        cv2.putText(img, label_text, (int(x1), int(y1) - 10), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                
+                # แปลงภาพที่มีการวาดกรอบแล้วกลับเป็น base64
+                _, buffer = cv2.imencode('.jpg', img)
+                img_base64 = base64.b64encode(buffer).decode('utf-8')
+                
+                # ส่งผลลัพธ์กลับไปยัง client
+                await websocket.send_json({
+                    "image": img_base64,
+                    "detections": detections,
+                    "count": len(detections)
+                })
+                
+            except json.JSONDecodeError:
+                await websocket.send_json({"error": "ข้อมูล JSON ไม่ถูกต้อง"})
+            except Exception as e:
+                print(f"❌ Error processing frame: {str(e)}")
+                await websocket.send_json({"error": f"เกิดข้อผิดพลาด: {str(e)}"})
+    
+    except WebSocketDisconnect:
+        print("⚠️ WebSocket client disconnected")
+    except Exception as e:
+        print(f"❌ WebSocket error: {str(e)}")
+        traceback.print_exc()
+
+# ✅ WebSocket endpoint สำหรับการตรวจจับแบบ real-time จากกล้อง IP
+@router.websocket("/ws/camera-detect")
+async def websocket_camera_detect(websocket: WebSocket, camera_id: int = Query(...)):
+    """
+    WebSocket endpoint สำหรับตรวจจับวัตถุแบบ real-time จากกล้อง IP ที่เลือก
+    ส่งผลลัพธ์กลับไปยัง client เพื่อแสดงในหน้าเว็บโดยตรง
+    """
+    global video_captures, detection_flags
+    
+    await websocket.accept()
+    detection_interval = 0.5  # ทำการตรวจจับทุก 0.5 วินาที (2 FPS)
+    
+    # ดึงข้อมูลกล้องจาก DB
+    try:
+        db = next(get_db())
+        camera = db.query(Camera).filter(Camera.id == camera_id).first()
+        if not camera:
+            await websocket.send_json({"error": "Camera not found"})
+            await websocket.close()
+            return
+        
+        rtsp_link = camera.stream_url
+        
+        # ตรวจสอบว่ากล้องถูกเปิดแล้วหรือยัง
+        if camera_id not in video_captures or not video_captures[camera_id].isOpened():
+            success = await start_camera(camera_id, rtsp_link)
+            if not success:
+                await websocket.send_json({"error": f"Failed to open camera {camera_id}"})
+                await websocket.close()
+                return
+        
+        device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+        print(f"🔍 Starting WebSocket camera detection. Using device: {device} for camera {camera_id}")
+        
+        detection_flags[camera_id] = True
+        last_detection_time = 0
+        
+        try:
+            while detection_flags.get(camera_id, True):
+                if camera_id not in video_captures or not video_captures[camera_id].isOpened():
+                    print(f"⚠️ Camera {camera_id} is closed")
+                    break
+                
+                success, frame = video_captures[camera_id].read()
+                if not success:
+                    await asyncio.sleep(0.01)
+                    continue
+                
+                current_time = time.time()
+                should_detect = (current_time - last_detection_time) >= detection_interval
+                
+                if should_detect:
+                    last_detection_time = current_time
+                    
+                    try:
+                        # ตรวจสอบความถูกต้องของเฟรม
+                        if frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:
+                            print(f"⚠️ Invalid frame received from camera {camera_id}")
+                            await asyncio.sleep(0.01)
+                            continue
+                        
+                        try:
+                            # ทำสำเนาเฟรมก่อนนำไปประมวลผล
+                            frame_copy = frame.copy()
+                            
+                            # กำหนดตัวแปร detections ตั้งแต่ต้นเพื่อแก้ปัญหา "referenced before assignment"
+                            detections = []
+                            
+                            # ใช้ subprocess เรียก yolo_worker.py เพื่อตรวจจับวัตถุ
+                            # ซึ่งเป็นวิธีที่ทำงานได้จริงแล้วในฟังก์ชันอื่นๆ
+                            # จำเป็นต้องเขียนลงไฟล์ชั่วคราว แต่คุณสามารถลดขนาดรูปภาพลงเพื่อให้เร็วขึ้น
+                            
+                            # สร้าง temp directory ถ้ายังไม่มี
+                            temp_dir = "uploads/temp_realtime"
+                            os.makedirs(temp_dir, exist_ok=True)
+                            
+                            # ลดขนาดเฟรมลงเพื่อให้การเขียนไฟล์และตรวจจับเร็วขึ้น (ลดลงมากขึ้น)
+                            frame_resized = cv2.resize(frame_copy, (320, 240))
+                            
+                            # สร้างชื่อไฟล์ชั่วคราวที่ไม่ซ้ำกัน
+                            temp_path = os.path.join(temp_dir, f"temp_frame_{camera_id}_{time.time()}.jpg")
+                            
+                            # บันทึกภาพลงไฟล์ชั่วคราวด้วยคุณภาพต่ำเพื่อให้เร็วขึ้น
+                            cv2.imwrite(temp_path, frame_resized, [cv2.IMWRITE_JPEG_QUALITY, 50])
+                            
+                            # ใช้ subprocess เรียก yolo_worker.py ซึ่งทำงานได้แล้ว
+                            # เพิ่ม timeout เป็น 10 วินาที
+                            result = subprocess.run(
+                                ["python", "app/services/yolo_worker.py", temp_path],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                                timeout=10  # เพิ่ม timeout เป็น 10 วินาที
+                            )
+                            
+                            # ลบไฟล์ชั่วคราวทันที
+                            try:
+                                if os.path.exists(temp_path):
+                                    os.remove(temp_path)
+                            except Exception as e:
+                                print(f"⚠️ Warning: Failed to delete temporary file: {e}")
+                            
+                            if result.returncode != 0:
+                                print(f"❌ YOLO worker error: {result.stderr}")
+                                detections = []
+                            else:
+                                # แยก JSON จาก stdout
+                                try:
+                                    start_index = result.stdout.find("{")
+                                    end_index = result.stdout.rfind("}") + 1
+                                    if start_index == -1 or end_index == 0:
+                                        detections = []
+                                    else:
+                                        clean_json = result.stdout[start_index:end_index]
+                                        output = json.loads(clean_json)
+                                        detections = output.get("detections", [])
+                                except json.JSONDecodeError:
+                                    print("❌ Failed to decode YOLO worker response")
+                                    detections = []
+                                    
+                            # วาดกรอบรอบวัตถุที่ตรวจพบ
+                            for detection in detections:
+                                label = detection["label"]
+                                conf = detection["confidence"]
+                                box = detection["box"]
+                                
+                                x1, y1, x2, y2 = [int(float(coord)) for coord in box]
+                                
+                                # วาดกรอบ
+                                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                                
+                                # วาดข้อความแสดงชื่อและความเชื่อมั่น
+                                label_text = f"{label}: {conf:.2f}"
+                                cv2.putText(frame, label_text, (x1, y1 - 10), 
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                        
+                        except Exception as e:
+                            print(f"❌ Error in detection: {str(e)}")
+                            traceback.print_exc()
+                        
+                        # แปลงภาพที่มีการวาดกรอบแล้วเป็น base64
+                        _, buffer = cv2.imencode('.jpg', frame)
+                        img_base64 = base64.b64encode(buffer).decode('utf-8')
+                        
+                        # ส่งผลลัพธ์กลับไปยัง client
+                        await websocket.send_json({
+                            "image": img_base64,
+                            "detections": detections,
+                            "count": len(detections)
+                        })
+                        
+                    except Exception as e:
+                        print(f"❌ Error in detection: {str(e)}")
+                        traceback.print_exc()
+                
+                # รอสักครู่เพื่อไม่ให้ใช้ CPU มากเกินไป
+                await asyncio.sleep(0.01)
+                
+        except WebSocketDisconnect:
+            print(f"⚠️ WebSocket client disconnected for camera {camera_id}")
+        finally:
+            # ไม่ปิดกล้องเมื่อ client disconnect เพราะอาจมีคนอื่นกำลังใช้อยู่
+            detection_flags[camera_id] = False
+    
+    except Exception as e:
+        print(f"❌ WebSocket camera detection error: {str(e)}")
+        traceback.print_exc()
+        try:
+            await websocket.send_json({"error": f"Server error: {str(e)}"})
+        except:
+            pass
+    finally:
+        # ปิดการเชื่อมต่อ WebSocket
+        try:
+            await websocket.close()
+        except:
+            pass
+
+# ✅ หน้าตรวจจับสินค้าแบบ real-time จากเว็บแคม
+@router.get("/realtime-webcam", response_class=HTMLResponse)
+async def get_realtime_webcam_page(
+    request: Request,
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+):
+    """
+    แสดงหน้า UI สำหรับการตรวจจับสินค้าแบบ real-time จากเว็บแคม
+    """
+    return templates.TemplateResponse("realtime_detection.html", {"request": request, "current_user": current_user})

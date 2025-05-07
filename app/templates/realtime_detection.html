@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Product Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 30px auto;
+        }
+
+        .video-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        #video,
+        #detectionCanvas {
+            width: 100%;
+            max-width: 640px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            background-color: #000;
+        }
+
+        #captureCanvas {
+            display: none;
+        }
+
+        .controls {
+            margin: 20px 0;
+        }
+
+        .btn-control {
+            margin-bottom: 10px;
+            min-width: 180px;
+        }
+
+        .detection-results {
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .product-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .product-item {
+            padding: 8px 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .product-item:last-child {
+            border-bottom: none;
+        }
+
+        .modal-body img {
+            max-width: 100%;
+        }
+
+        .loading-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Real-time Product Detection</h1>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="video-container">
+                    <!-- วิดีโอจากกล้อง -->
+                    <video id="video" autoplay></video>
+                    <!-- Canvas สำหรับจับภาพ (ซ่อนไว้) -->
+                    <canvas id="captureCanvas" width="640" height="480"></canvas>
+                    <!-- Canvas สำหรับแสดงผลการตรวจจับ -->
+                    <canvas id="detectionCanvas" width="640" height="480"></canvas>
+                    <div id="loadingIndicator" class="loading-indicator">กำลังประมวลผล...</div>
+                </div>
+
+                <div class="controls d-flex flex-wrap justify-content-between">
+                    <div>
+                        <button id="startCameraBtn" class="btn btn-primary btn-control mb-2">เปิดกล้อง</button>
+                    </div>
+                    <div>
+                        <button id="startDetectionBtn" class="btn btn-success btn-control mb-2" disabled>เริ่มตรวจจับแบบ
+                            Realtime</button>
+                        <button id="stopDetectionBtn" class="btn btn-danger btn-control mb-2"
+                            disabled>หยุดตรวจจับ</button>
+                    </div>
+                    <div>
+                        <button id="captureBtn" class="btn btn-info btn-control mb-2" disabled>จับภาพและตรวจจับ</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="detection-results">
+                    <h4>ผลการตรวจจับ</h4>
+                    <div class="alert alert-info">
+                        <strong>พบสินค้า: </strong><span id="detectionCount">0</span> รายการ
+                    </div>
+                    <div class="product-list" id="detectionList">
+                        <div class="text-center text-muted">ยังไม่มีการตรวจจับ</div>
+                    </div>
+                </div>
+
+                <div class="order-info">
+                    <!-- ข้อมูลออเดอร์จะถูกเพิ่มที่นี่ด้วย JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal แสดงผลการตรวจจับ -->
+    <div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">ผลการตรวจจับสินค้า</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="modalContent">
+                    <!-- ผลลัพธ์จะถูกเพิ่มที่นี่ด้วย JavaScript -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">ปิด</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // DOM Elements
+        const video = document.getElementById('video');
+        const captureCanvas = document.getElementById('captureCanvas');
+        const captureCtx = captureCanvas.getContext('2d');
+        const detectionCanvas = document.getElementById('detectionCanvas');
+        const detectionCtx = detectionCanvas.getContext('2d');
+        const startCameraBtn = document.getElementById('startCameraBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const startDetectionBtn = document.getElementById('startDetectionBtn');
+        const stopDetectionBtn = document.getElementById('stopDetectionBtn');
+        const detectionCount = document.getElementById('detectionCount');
+        const detectionList = document.getElementById('detectionList');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const resultModal = new bootstrap.Modal(document.getElementById('resultModal'));
+
+        // Variables for WebSocket
+        let websocket = null;
+        let detectionInterval = null;
+        let isDetecting = false;
+
+        // เริ่มต้นกล้อง
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                    video.style.display = 'block';
+                    detectionCanvas.style.display = 'none';
+                    captureBtn.disabled = false;
+                    startDetectionBtn.disabled = false;
+                    startCameraBtn.disabled = true;
+                    console.log('Camera started');
+                })
+                .catch(err => {
+                    console.error('Error accessing camera:', err);
+                    alert('ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตการใช้กล้อง');
+                });
+        }
+
+        // จับภาพและส่งไปยังเซิร์ฟเวอร์เพื่อตรวจจับ
+        function captureAndDetect() {
+            loadingIndicator.style.display = 'block';
+
+            // จับภาพจากวิดีโอลงใน Canvas
+            captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+            // แปลง Canvas เป็น Data URL (JPEG)
+            const imageData = captureCanvas.toDataURL('image/jpeg');
+
+            // สร้าง FormData และเพิ่มไฟล์
+            fetch(imageData)
+                .then(res => res.blob())
+                .then(blob => {
+                    const formData = new FormData();
+                    formData.append('file', blob, 'capture.jpg');
+
+                    // ส่งไปยัง API
+                    return fetch('/packing/detect', {
+                        method: 'POST',
+                        body: formData
+                    });
+                })
+                .then(response => response.json())
+                .then(data => {
+                    loadingIndicator.style.display = 'none';
+
+                    // แสดงผลการตรวจจับ
+                    displayDetections(data.detections);
+
+                    // แสดง Modal กับภาพที่มีการวาดกรอบ
+                    if (data.annotated_image_path) {
+                        const modalContent = document.getElementById('modalContent');
+                        modalContent.innerHTML = `
+                            <img src="${data.annotated_image_path}" class="img-fluid" alt="Detection result">
+                            <div class="mt-3">
+                                <p>พบสินค้า ${data.detections.length} รายการ</p>
+                            </div>
+                        `;
+                        resultModal.show();
+                    }
+                })
+                .catch(error => {
+                    loadingIndicator.style.display = 'none';
+                    console.error('Error detecting objects:', error);
+                    alert('เกิดข้อผิดพลาดในการตรวจจับวัตถุ');
+                });
+        }
+
+        // เริ่มการตรวจจับแบบ Real-time ผ่าน WebSocket
+        function startRealtimeDetection() {
+            if (isDetecting) return;
+
+            // เปลี่ยนการแสดงผล
+            video.style.display = 'none';
+            detectionCanvas.style.display = 'block';
+
+            // สร้าง WebSocket connection โดยใช้พอร์ต 8001
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.hostname;
+            const port = "8001";  // ใช้พอร์ต 8001 แทนที่จะใช้ window.location.port
+
+            websocket = new WebSocket(`${wsProtocol}//${host}:${port}/packing/ws/webcam-detect`);
+
+            websocket.onopen = () => {
+                console.log('WebSocket connected');
+                isDetecting = true;
+                captureBtn.disabled = true;
+                startDetectionBtn.disabled = true;
+                stopDetectionBtn.disabled = false;
+
+                // เริ่มส่งภาพทุกๆ 200ms (5 FPS)
+                detectionInterval = setInterval(sendFrameForDetection, 200);
+            };
+
+            websocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.error) {
+                    console.error('Error from server:', data.error);
+                    return;
+                }
+
+                // แสดงข้อมูลการตรวจจับ
+                displayDetections(data.detections);
+
+                // แสดงภาพที่มีการวาดกรอบแล้ว
+                const img = new Image();
+                img.onload = () => {
+                    detectionCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+                    detectionCtx.drawImage(img, 0, 0, detectionCanvas.width, detectionCanvas.height);
+                };
+                img.src = 'data:image/jpeg;base64,' + data.image;
+            };
+
+            websocket.onclose = () => {
+                console.log('WebSocket disconnected');
+                stopRealtimeDetection();
+            };
+
+            websocket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                stopRealtimeDetection();
+                alert('เกิดข้อผิดพลาดในการเชื่อมต่อ WebSocket');
+            };
+        }
+
+        // หยุดการตรวจจับแบบ Real-time
+        function stopRealtimeDetection() {
+            if (!isDetecting) return;
+
+            clearInterval(detectionInterval);
+
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                websocket.close();
+            }
+
+            isDetecting = false;
+            video.style.display = 'block';
+            detectionCanvas.style.display = 'none';
+            captureBtn.disabled = false;
+            startDetectionBtn.disabled = false;
+            stopDetectionBtn.disabled = true;
+        }
+
+        // จับภาพปัจจุบันและส่งไปยัง WebSocket
+        function sendFrameForDetection() {
+            if (!isDetecting || !websocket || websocket.readyState !== WebSocket.OPEN) return;
+
+            // จับภาพจากวิดีโอลงใน Canvas
+            captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+            // แปลงเป็น base64
+            const imageData = captureCanvas.toDataURL('image/jpeg');
+
+            // ส่งข้อมูลไปยัง WebSocket
+            websocket.send(JSON.stringify({
+                image: imageData
+            }));
+        }
+
+        // แสดงผลการตรวจจับ
+        function displayDetections(detections) {
+            detectionCount.textContent = detections.length;
+
+            if (detections.length === 0) {
+                detectionList.innerHTML = '<div class="text-center text-muted">ไม่พบสินค้า</div>';
+                return;
+            }
+
+            let html = '';
+            const productCounts = {};
+
+            // นับจำนวนสินค้าแต่ละชนิด
+            detections.forEach(detection => {
+                const label = detection.label;
+                productCounts[label] = (productCounts[label] || 0) + 1;
+            });
+
+            // สร้าง HTML สำหรับแสดงผล
+            for (const [product, count] of Object.entries(productCounts)) {
+                html += `<div class="product-item">
+                    <strong>${product}</strong>: ${count} ชิ้น
+                </div>`;
+            }
+
+            detectionList.innerHTML = html;
+        }
+
+        // Event Listeners
+        startCameraBtn.addEventListener('click', startCamera);
+        captureBtn.addEventListener('click', captureAndDetect);
+        startDetectionBtn.addEventListener('click', startRealtimeDetection);
+        stopDetectionBtn.addEventListener('click', stopRealtimeDetection);
+
+    </script>
+</body>
+
+</html>

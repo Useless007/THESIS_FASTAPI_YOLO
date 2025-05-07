@@ -259,6 +259,20 @@
                     }
                 });
             }
+
+            // ติดตั้ง event listener สำหรับ switch การตรวจจับบนกล้องโดยตรงแบบ realtime
+            const directDetectSwitch = document.getElementById('direct-realtime-detection-switch');
+            if (directDetectSwitch) {
+                directDetectSwitch.addEventListener('change', function () {
+                    if (this.checked) {
+                        // เปิดการตรวจจับ realtime แบบ client-side
+                        startDirectRealtimeDetection();
+                    } else {
+                        // ปิดการตรวจจับ realtime แบบ client-side
+                        stopDirectRealtimeDetection();
+                    }
+                });
+            }
         }
 
         // เริ่มการตรวจจับแบบ server-side realtime
@@ -333,6 +347,162 @@
                 document.getElementById('detect-status').className = 'detect-status error';
             }
         }
+
+        // เริ่มการตรวจจับแบบ direct realtime detection จากกล้องที่เลือก
+        async function startDirectRealtimeDetection() {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+
+            if (!token) {
+                alert("❌ ไม่พบ Token สำหรับการยืนยันตัวตน");
+                document.getElementById('direct-realtime-detection-switch').checked = false;
+                return;
+            }
+
+            if (!currentCamera) {
+                alert("❌ กรุณาเลือกกล้องก่อน");
+                document.getElementById('direct-realtime-detection-switch').checked = false;
+                return;
+            }
+
+            // แสดงสถานะกำลังตรวจจับ
+            document.getElementById('detect-status').textContent = 'กำลังเริ่มการตรวจจับแบบ realtime จากกล้องโดยตรง...';
+            document.getElementById('detect-status').className = 'detect-status loading';
+
+            try {
+                // สร้าง WebSocket connection โดยใช้พอร์ต 8001
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.hostname;
+                const port = "8001";  // ใช้พอร์ต 8001 แทนที่จะใช้ window.location.port
+
+                if (window.realtimeDetectionWS) {
+                    window.realtimeDetectionWS.close();
+                }
+
+                // สร้าง WebSocket ใหม่เพื่อติดต่อกับ server ที่ port 8001
+                window.realtimeDetectionWS = new WebSocket(`${wsProtocol}//${host}:${port}/packing/ws/camera-detect?camera_id=${currentCamera.id}`);
+
+                window.realtimeDetectionWS.onopen = () => {
+                    console.log('✅ WebSocket connected for camera detection');
+                    document.getElementById('detect-status').textContent = 'กำลังตรวจจับแบบ realtime จากกล้องโดยตรง';
+                    document.getElementById('detect-status').className = 'detect-status success';
+
+                    // ปิดปุ่มอื่นๆ ระหว่างที่ตรวจจับ
+                    document.getElementById('realtime-detection-switch').disabled = true;
+                    document.getElementById('capture').disabled = true;
+                };
+
+                window.realtimeDetectionWS.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+
+                    if (data.error) {
+                        console.error('❌ Error from server:', data.error);
+                        return;
+                    }
+
+                    // แสดงข้อมูลการตรวจจับ
+                    displayDetections(data.detections);
+
+                    // แสดงภาพที่มีการวาดกรอบแล้ว
+                    const cameraStream = document.getElementById('camera-stream');
+                    if (data.image) {
+                        cameraStream.src = 'data:image/jpeg;base64,' + data.image;
+                    }
+                };
+
+                window.realtimeDetectionWS.onclose = () => {
+                    console.log('⚠️ WebSocket disconnected for camera detection');
+                    stopDirectRealtimeDetection();
+                };
+
+                window.realtimeDetectionWS.onerror = (error) => {
+                    console.error('❌ WebSocket error:', error);
+                    document.getElementById('detect-status').textContent = 'เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error;
+                    document.getElementById('detect-status').className = 'detect-status error';
+                    stopDirectRealtimeDetection();
+                };
+            } catch (error) {
+                console.error("❌ Error starting direct realtime detection:", error);
+                document.getElementById('detect-status').textContent = 'เกิดข้อผิดพลาดในการเริ่มตรวจจับ: ' + error.message;
+                document.getElementById('detect-status').className = 'detect-status error';
+                document.getElementById('direct-realtime-detection-switch').checked = false;
+            }
+        }
+
+        // หยุดการตรวจจับแบบ direct realtime
+        function stopDirectRealtimeDetection() {
+            try {
+                if (window.realtimeDetectionWS) {
+                    window.realtimeDetectionWS.close();
+                    window.realtimeDetectionWS = null;
+                }
+
+                document.getElementById('detect-status').textContent = 'หยุดการตรวจจับแบบ realtime แล้ว';
+                document.getElementById('detect-status').className = 'detect-status';
+
+                // เปิดปุ่มต่างๆ กลับมา
+                document.getElementById('realtime-detection-switch').disabled = false;
+                document.getElementById('capture').disabled = false;
+
+                // ถ้าเปิดกล้องอยู่ ให้กลับไปใช้ stream ปกติ
+                if (!document.getElementById('start-camera').disabled) {
+                    const token = document.cookie.split('; ')
+                        .find(row => row.startsWith('Authorization='))?.split('=')[1];
+                    if (token && currentCamera) {
+                        const cameraStream = document.getElementById('camera-stream');
+                        cameraStream.src = `http://localhost:8001/packing/stream?camera_id=${currentCamera.id}&token=${token}`;
+                    }
+                }
+            } catch (error) {
+                console.error("❌ Error stopping direct realtime detection:", error);
+            }
+        }
+
+        // แสดงผลการตรวจจับในหน้าเว็บ
+        function displayDetections(detections) {
+            const detectionList = document.getElementById('detection-list');
+            detectionList.innerHTML = '';
+
+            if (!detections || detections.length === 0) {
+                detectionList.innerHTML = '<div class="text-gray-500">ไม่พบวัตถุใดในภาพ</div>';
+                return;
+            }
+
+            // นับจำนวนวัตถุแต่ละประเภท
+            const counts = {};
+            detections.forEach(detection => {
+                const label = detection.label;
+                counts[label] = (counts[label] || 0) + 1;
+            });
+
+            // แสดงผลลัพธ์
+            for (const [label, count] of Object.entries(counts)) {
+                const item = document.createElement('div');
+                item.className = 'py-2 border-b';
+                item.innerHTML = `<span class="font-bold">${label}</span>: <span class="text-blue-600">${count} ชิ้น</span>`;
+                detectionList.appendChild(item);
+            }
+        }
+
+        // ฟังก์ชันเปิดการตรวจจับแบบสตรีมโดยตรง
+        function openDirectRealtimeDetection() {
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+
+            if (!token) {
+                alert("❌ ไม่พบ Token สำหรับการยืนยันตัวตน");
+                return;
+            }
+
+            if (!currentCamera) {
+                alert("❌ กรุณาเลือกกล้องก่อน");
+                return;
+            }
+
+            // เปิดหน้าต่างใหม่สำหรับการตรวจจับแบบสตรีมโดยตรง
+            const directUrl = `http://localhost:8001/packing/realtime-detect-direct?camera_id=${currentCamera.id}&token=${token}`;
+            window.open(directUrl, '_blank', 'width=680,height=520');
+        }
     </script>
 </head>
 
@@ -376,6 +546,17 @@
                     </div>
                 </label>
             </div>
+
+            <!-- ใหม่: Toggle switch สำหรับเปิด/ปิดการตรวจจับวัตถุบนกล้องที่เลือกโดยตรง -->
+            <div class="toggle-wrapper mt-3">
+                <label for="direct-realtime-detection-switch">การตรวจจับบนกล้องโดยตรง (Realtime):</label>
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="direct-realtime-detection-switch" class="sr-only peer">
+                    <div
+                        class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600">
+                    </div>
+                </label>
+            </div>
         </div>
 
         <!-- Streaming Video -->
@@ -406,6 +587,14 @@
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8z"></path>
                 </svg>
             </button>
+            <a href="http://localhost:8001/packing/realtime-webcam" target="_blank"
+                class="bg-purple-500 text-white px-6 py-3 rounded-lg shadow hover:bg-purple-600 flex items-center">
+                🎥 เปิดการตรวจจับแบบ Webcam Realtime
+            </a>
+            <a href="javascript:void(0)" onclick="openDirectRealtimeDetection()"
+                class="bg-green-500 text-white px-6 py-3 rounded-lg shadow hover:bg-green-600 flex items-center ml-2">
+                🎯 เปิดการตรวจจับแบบสตรีมโดยตรง
+            </a>
         </div>
 
         <!-- ✅ เพิ่ม div สำหรับปุ่มควบคุม real-time detection -->
