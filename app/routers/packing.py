@@ -451,6 +451,46 @@ async def realtime_detect(
 
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
 
+# ✅ เพิ่ม WebSocket endpoint สำหรับแสดงภาพทั้งต้นฉบับและภาพที่มีการตรวจจับพร้อมกัน
+@router.websocket("/ws/dual-stream")
+async def dual_stream_ws(
+    websocket: WebSocket,
+    camera_id: int = Query(..., description="ID ของกล้องที่ต้องการสตรีม"),
+    db: Session = Depends(get_db)
+):
+    # ตรวจสอบว่ากล้องมีอยู่จริง
+    camera = db.query(Camera).filter(Camera.id == camera_id).first()
+    if not camera:
+        await websocket.close(code=1008, reason="Camera not found")
+        return
+
+    rtsp_link = camera.stream_url
+    
+    # รับการเชื่อมต่อ WebSocket
+    await websocket.accept()
+    
+    # นำเข้าฟังก์ชัน process_rtsp จากไฟล์ yolo_realtime_worker
+    from app.services.yolo_realtime_worker import process_rtsp
+    
+    try:
+        # ใช้ process_rtsp จาก yolo_realtime_worker เพื่อประมวลผลภาพจาก RTSP
+        for detections, raw_base64, annotated_base64, _ in process_rtsp(rtsp_link, save_annotated=False):
+            # ส่งทั้งภาพต้นฉบับและภาพที่มีการตรวจจับกลับไปที่ client
+            await websocket.send_json({
+                "detections": detections,
+                "raw_image": raw_base64,
+                "annotated_image": annotated_base64
+            })
+    except WebSocketDisconnect:
+        print(f"🔌 WebSocket disconnected for camera {camera_id}")
+    except Exception as e:
+        print(f"❌ Error in dual stream WebSocket: {str(e)}")
+        traceback.print_exc()
+        try:
+            await websocket.close(code=1011, reason=f"Server error: {str(e)}")
+        except:
+            pass
+
 # ✅ สตรีมวิดีโจากกล้องพร้อมการตรวจจับแบบ direct real-time (ไม่ใช้ WebSocket)
 @router.get("/realtime-detect-direct")
 async def realtime_detect_direct(
