@@ -437,7 +437,7 @@ def get_work_status(
     
     orders = db.query(Order)\
         .options(
-            joinedload(Order.user),
+            joinedload(Order.customer),  # ใช้ customer แทน user
             joinedload(Order.assigned_user),
             joinedload(Order.camera)
         )\
@@ -461,8 +461,8 @@ def get_work_status(
         
         # เอาชื่อลูกค้าที่สั่ง
         customer_name = "N/A"  
-        if order.user:
-            customer_name = order.user.email
+        if order.customer:  # ใช้ customer แทน user
+            customer_name = order.customer.email
         
         order_data.append({
             "order_id": order.order_id,

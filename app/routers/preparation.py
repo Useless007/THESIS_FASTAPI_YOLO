@@ -23,11 +23,11 @@ def get_confirmed_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 3))
 ):
-    # ใช้ joinedload เพื่อโหลดข้อมูล user มาด้วย
-    orders = db.query(Order).options(joinedload(Order.user)).filter(Order.status == "confirmed").all()
+    # ใช้ joinedload เพื่อโหลดข้อมูล customer มาด้วย (แก้จาก user เป็น customer)
+    orders = db.query(Order).options(joinedload(Order.customer)).filter(Order.status == "confirmed").all()
     return [{
         "id": order.order_id, 
-        "email": order.user.email if order.user else None,  # ดึง email จาก user relationship
+        "email": order.customer.email if order.customer else None,  # แก้จาก user เป็น customer
         "total": order.total, 
         "created_at": order.created_at
     } for order in orders]
@@ -42,9 +42,9 @@ def get_order_details(
     """
     ดึงรายละเอียดคำสั่งซื้อ รวมถึงรายการสินค้า
     """
-    # ใช้ joinedload เพื่อโหลดข้อมูล user และ order_items
+    # ใช้ joinedload เพื่อโหลดข้อมูล customer และ order_items
     order = db.query(Order).options(
-        joinedload(Order.user),
+        joinedload(Order.customer),
         joinedload(Order.order_items)
     ).filter(Order.order_id == order_id).first()
     
@@ -65,7 +65,7 @@ def get_order_details(
 
     return {
         "id": order.order_id,
-        "email": order.user.email if order.user else None,
+        "email": order.customer.email if order.customer else None,
         "total": order.total,
         "created_at": order.created_at,
         "items": items

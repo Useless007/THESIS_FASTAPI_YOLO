@@ -552,14 +552,14 @@ def get_packing_orders(
     เฉพาะออเดอร์ที่ยังไม่ถูก assign หรือออเดอร์ที่ถูก assign ให้กับพนักงานปัจจุบัน
     """
     orders = db.query(Order)\
-        .options(joinedload(Order.user))\
+        .options(joinedload(Order.customer))\
         .filter(or_(Order.assigned_to == None, Order.assigned_to == current_user.id))\
         .filter(Order.status.in_(["packing", "verifying"]))\
         .all()
     return [
         {
             "id": order.order_id,
-            "email": order.user.email if order.user else None,  # เปลี่ยนจาก order.email เป็น order.user.email
+            "email": order.customer.email if order.customer else None,
             "total": order.total,
             "created_at": order.created_at,
             "items": order.order_items,
@@ -576,7 +576,7 @@ def assign_order(
     order = (
         db.query(Order)
         .options(
-            joinedload(Order.user),
+            joinedload(Order.customer),
             joinedload(Order.order_items).joinedload(OrderItem.product)
         )
         .filter(
@@ -612,7 +612,7 @@ def assign_order(
 
     order_data = {
         "order_id": order.order_id,
-        "customer_email": order.user.email if order.user else None,
+        "customer_email": order.customer.email if order.customer else None,
         "total_price": order.total,
         "items": formatted_items,
         "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
@@ -710,7 +710,7 @@ def get_current_order(
     """
     order = db.query(Order)\
         .options(
-            joinedload(Order.user),
+            joinedload(Order.customer),
             joinedload(Order.order_items).joinedload(OrderItem.product)
         )\
         .filter(
@@ -736,7 +736,7 @@ def get_current_order(
 
     return JSONResponse(content={
         "order_id": order.order_id,
-        "customer_email": order.user.email if order.user else None,
+        "customer_email": order.customer.email if order.customer else None,
         "total_price": order.total,
         "items": formatted_items,
         "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
