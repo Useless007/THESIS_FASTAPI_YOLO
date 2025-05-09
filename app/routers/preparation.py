@@ -55,13 +55,20 @@ def get_order_details(
     items = []
     if order.order_items:
         for item in order.order_items:
-            items.append({
+            # Get product info including the image path
+            product_info = {
                 "product_id": item.product_id,
                 "quantity": item.quantity,
                 "price": item.price_at_order,
                 "total": item.total_item_price,
                 "product_name": item.product.name if item.product else "Unknown"
-            })
+            }
+            
+            # Add image path if product exists
+            if item.product:
+                product_info["image_path"] = item.product.image_path
+                
+            items.append(product_info)
 
     return {
         "id": order.order_id,
@@ -172,7 +179,8 @@ def get_products_inventory(
             "name": product.name,
             "price": product.price,
             "stock": product.stock,
-            "category": category
+            "category": category,
+            "image_path": product.image_path  # เพิ่ม path รูปภาพสินค้า
         })
     
     return products_inventory

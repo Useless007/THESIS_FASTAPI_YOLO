@@ -79,6 +79,7 @@
                             <thead class="sticky top-0">
                                 <tr class="bg-gray-200 text-gray-600 uppercase text-xs font-semibold">
                                     <th class="py-3 px-5 border">ID</th>
+                                    <th class="py-3 px-5 border">รูปภาพ</th>
                                     <th class="py-3 px-5 border">ชื่อสินค้า</th>
                                     <th class="py-3 px-5 border">หมวดหมู่</th>
                                     <th class="py-3 px-5 border">ราคา</th>
@@ -97,16 +98,16 @@
 
     <!-- Modal สำหรับแสดงรายละเอียดคำสั่งซื้อ -->
     <div id="orderDetailsModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center">
-        <div class="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full">
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-2xl w-full">
             <h3 class="text-xl font-bold mb-4">📑 รายละเอียดคำสั่งซื้อ</h3>
             <p><strong>Order ID:</strong> <span id="modal-order-id"></span></p>
             <p><strong>Email:</strong> <span id="modal-order-email"></span></p>
             <p><strong>Total:</strong> ฿<span id="modal-order-total"></span></p>
             <p><strong>Date:</strong> <span id="modal-order-date"></span></p>
             <h4 class="font-bold mt-4">📋 รายการสินค้า:</h4>
-            <ul id="modal-order-items" class="list-disc pl-5 mt-2">
+            <div id="modal-order-items" class="mt-2 space-y-2">
                 <!-- รายการสินค้าจะถูกเพิ่มที่นี่ -->
-            </ul>
+            </div>
             <div class="mt-6 flex justify-end space-x-2">
                 <button onclick="closeOrderModal()"
                     class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">ปิด</button>
@@ -215,6 +216,9 @@
                 table.innerHTML += `
                     <tr class="hover:bg-gray-50">
                         <td class="py-3 px-5 border">${product.product_id}</td>
+                        <td class="py-3 px-5 border">
+                            <img src="${product.image_path}" alt="${product.name}" class="w-16 h-16 object-contain mx-auto">
+                        </td>
                         <td class="py-3 px-5 border text-left">${product.name}</td>
                         <td class="py-3 px-5 border">${getCategoryName(product.category)}</td>
                         <td class="py-3 px-5 border">฿${product.price.toLocaleString()}</td>
@@ -268,9 +272,40 @@
 
                     const itemsList = document.getElementById('modal-order-items');
                     itemsList.innerHTML = '';
+
+                    // สร้างตาราง HTML สำหรับแสดงรายการสินค้า
+                    let itemsTable = '<table class="w-full border-collapse border border-gray-200">';
+                    itemsTable += `
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="border p-2">รูปภาพ</th>
+                                <th class="border p-2">สินค้า</th>
+                                <th class="border p-2">จำนวน</th>
+                                <th class="border p-2">ราคา/ชิ้น</th>
+                                <th class="border p-2">รวม</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    `;
+
                     data.items.forEach(item => {
-                        itemsList.innerHTML += `<li>${item.product_name} (x${item.quantity}) - ฿${item.price}</li>`;
+                        itemsTable += `
+                            <tr class="hover:bg-gray-50">
+                                <td class="border p-2 text-center">
+                                    ${item.image_path ?
+                                `<img src="${item.image_path}" alt="${item.product_name}" class="w-16 h-16 object-contain mx-auto">` :
+                                '<div class="w-16 h-16 bg-gray-200 flex items-center justify-center mx-auto">ไม่มีรูป</div>'}
+                                </td>
+                                <td class="border p-2">${item.product_name}</td>
+                                <td class="border p-2 text-center">${item.quantity}</td>
+                                <td class="border p-2 text-right">฿${item.price.toLocaleString()}</td>
+                                <td class="border p-2 text-right">฿${item.total.toLocaleString()}</td>
+                            </tr>
+                        `;
                     });
+
+                    itemsTable += '</tbody></table>';
+                    itemsList.innerHTML = itemsTable;
 
                     document.getElementById('orderDetailsModal').classList.remove('hidden');
                 })

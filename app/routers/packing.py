@@ -1095,7 +1095,8 @@ def get_current_order(
             "product_name": item.product.name if item.product else "Unknown",
             "quantity": item.quantity,
             "price": item.price_at_order,
-            "total": item.total_item_price
+            "total": item.total_item_price,
+            "image_path": item.product.image_path if item.product else None
         }
         for item in order.order_items
     ]
