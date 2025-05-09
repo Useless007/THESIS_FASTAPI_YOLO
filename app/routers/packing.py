@@ -427,14 +427,10 @@ async def realtime_detect(
                         
                         # แปลงภาพที่มีการวาดกรอบแล้วเป็น base64
                         _, buffer = cv2.imencode('.jpg', frame)
-                        img_base64 = base64.b64encode(buffer).decode('utf-8')
-                        
-                        # ส่งผลลัพธ์กลับไปยัง client
-                        await websocket.send_json({
-                            "image": img_base64,
-                            "detections": detections,
-                            "count": len(detections)
-                        })
+                        yield (
+                            b'--frame\r\n'
+                            b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
+                        )
                         
                     except Exception as e:
                         print(f"❌ Error in detection: {str(e)}")
@@ -466,29 +462,89 @@ async def dual_stream_ws(
 
     rtsp_link = camera.stream_url
     
+    # เพิ่มตัวแปรควบคุมสถานะของ WebSocket
+    websocket_active = True
+    
     # รับการเชื่อมต่อ WebSocket
     await websocket.accept()
+    print("INFO: connection open")
     
     # นำเข้าฟังก์ชัน process_rtsp จากไฟล์ yolo_realtime_worker
-    from app.services.yolo_realtime_worker import process_rtsp
-    
     try:
+        from app.services.yolo_realtime_worker import process_rtsp, start_worker, stop_worker
+        
+        # เริ่ม worker thread ก่อน
+        start_worker()
+        
         # ใช้ process_rtsp จาก yolo_realtime_worker เพื่อประมวลผลภาพจาก RTSP
-        for detections, raw_base64, annotated_base64, _ in process_rtsp(rtsp_link, save_annotated=False):
-            # ส่งทั้งภาพต้นฉบับและภาพที่มีการตรวจจับกลับไปที่ client
-            await websocket.send_json({
-                "detections": detections,
-                "raw_image": raw_base64,
-                "annotated_image": annotated_base64
-            })
+        stream_generator = process_rtsp(rtsp_link, save_annotated=False)
+        
+        while websocket_active:
+            try:
+                # ใช้ asyncio.wait_for เพื่อป้องกันการติดแชนแนล
+                next_frame = next(stream_generator)
+                detections, raw_base64, annotated_base64, _ = next_frame
+                
+                # ส่งทั้งภาพต้นฉบับและภาพที่มีการตรวจจับกลับไปที่ client
+                try:
+                    await asyncio.wait_for(
+                        websocket.send_json({
+                            "detections": detections,
+                            "raw_image": raw_base64,
+                            "annotated_image": annotated_base64
+                        }),
+                        timeout=0.5  # กำหนด timeout 0.5 วินาที
+                    )
+                    # หน่วงเวลาเล็กน้อย (20ms) เพื่อป้องกัน CPU ทำงานหนักเกินไป
+                    await asyncio.sleep(0.02)
+                except asyncio.TimeoutError:
+                    # เกิด timeout - ลองตรวจสอบว่า WebSocket ยังเชื่อมต่ออยู่หรือไม่
+                    print("⚠️ Timeout sending data to WebSocket")
+                    websocket_active = False
+                    break
+                except WebSocketDisconnect:
+                    print(f"🔌 WebSocket disconnected for camera {camera_id}")
+                    websocket_active = False
+                    break
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if "socket is closed" in error_str or "connection" in error_str or "websocket" in error_str:
+                        print(f"🔌 WebSocket closed: {str(e)}")
+                        websocket_active = False
+                        break
+                    else:
+                        print(f"⚠️ Error sending data to WebSocket: {str(e)}")
+                        # เพิ่มการตรวจสอบสถานะเชื่อมต่อ
+                        websocket_active = False
+                        break
+            except StopIteration:
+                print("🛑 Stream generator ended")
+                websocket_active = False
+                break
+            except Exception as e:
+                print(f"❌ Error in stream processing: {str(e)}")
+                websocket_active = False
+                break
+                
     except WebSocketDisconnect:
         print(f"🔌 WebSocket disconnected for camera {camera_id}")
     except Exception as e:
         print(f"❌ Error in dual stream WebSocket: {str(e)}")
         traceback.print_exc()
+    finally:
+        # เพิ่มการหยุดทำงานของ worker thread เมื่อ WebSocket ถูกปิด
         try:
-            await websocket.close(code=1011, reason=f"Server error: {str(e)}")
-        except:
+            stop_worker()
+            print(f"✅ Stopped worker thread for camera {camera_id}")
+        except Exception as e:
+            print(f"⚠️ Error stopping worker: {str(e)}")
+            
+        # ปิดการเชื่อมต่อ WebSocket
+        try:
+            await websocket.close()
+            print(f"✅ Closed WebSocket for camera {camera_id}")
+        except Exception as e:
+            print(f"⚠️ Couldn't close WebSocket: {str(e)}")
             pass
 
 # ✅ สตรีมวิดีโจากกล้องพร้อมการตรวจจับแบบ direct real-time (ไม่ใช้ WebSocket)
@@ -913,6 +969,7 @@ async def upload_packed_image(
 @router.put("/orders/{order_id}/verify", response_class=JSONResponse)
 async def verify_order(
     order_id: int,
+    request: Request,
     verified: bool = Form(...),
     file: UploadFile = File(None),
     db: Session = Depends(get_db),
@@ -925,16 +982,62 @@ async def verify_order(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found or not assigned to you")
 
-    if not file and not order.image_path:
-        raise HTTPException(status_code=400, detail="กรุณาตรวจจับสินค้าก่อน")
-
-    if file:
+    # ดึงหรือสร้างรูปภาพ
+    has_image = False
+    
+    # เพิ่ม log เพื่อตรวจสอบ request
+    print(f"Request headers: {request.headers}")
+    print(f"Referer: {request.headers.get('referer', 'No referer')}")
+    
+    # กรณีมีไฟล์รูปภาพถูกส่งมา
+    if file and file.filename:
+        has_image = True
         upload_dir = "uploads/packed_orders"
         os.makedirs(upload_dir, exist_ok=True)
         file_path = os.path.join(upload_dir, f"{order_id}.jpg").replace("\\", "/")
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         order.image_path = file_path
+        print(f"✅ Image uploaded from form data: {file_path}")
+    
+    # กรณีที่มีรูปภาพเก็บอยู่แล้ว
+    elif order.image_path and os.path.exists(order.image_path):
+        has_image = True
+        print(f"✅ Using existing image: {order.image_path}")
+    
+    # กรณีต้องดึงรูปล่าสุดจากกล้องที่กำลังเปิดอยู่
+    else:
+        print("⚠️ No image found, attempting to capture from active camera")
+        try:
+            # ดูว่ามีกล้องที่เปิดอยู่หรือไม่
+            cameras = db.query(Camera).all()
+            for camera in cameras:
+                camera_id = camera.id
+                if camera_id in video_captures and video_captures[camera_id].isOpened():
+                    # อ่านเฟรมล่าสุดจากกล้อง
+                    success, frame = video_captures[camera_id].read()
+                    if success:
+                        # บันทึกรูปภาพ
+                        upload_dir = "uploads/packed_orders"
+                        os.makedirs(upload_dir, exist_ok=True)
+                        file_path = os.path.join(upload_dir, f"{order_id}.jpg").replace("\\", "/")
+                        cv2.imwrite(file_path, frame)
+                        order.image_path = file_path
+                        has_image = True
+                        print(f"✅ Captured new image from camera: {file_path}")
+                        break
+        except Exception as e:
+            print(f"❌ Error capturing frame from camera: {str(e)}")
+
+    # ปรับเงื่อนไขการตรวจสอบ referer ให้ครอบคลุมทั้งกรณี dual-stream และกรณีที่มีการตรวจจับภาพแล้ว
+    referer = str(request.headers.get('referer', ''))
+    is_from_camera_page = any(keyword in referer.lower() for keyword in ['dual-stream', 'packing_dashboard', 'camera', 'detect'])
+    
+    if not has_image and not is_from_camera_page:
+        print(f"❌ No image available and not from camera page. Referer: {referer}")
+        raise HTTPException(status_code=400, detail="กรุณาตรวจจับสินค้าก่อนกดยืนยัน")
+    else:
+        print(f"✅ Verification proceeding. has_image={has_image}, is_from_camera_page={is_from_camera_page}")
 
     # ✅ ถ้าสินค้าไม่ครบ → เปลี่ยนสถานะเป็น "pending" และแจ้งเตือนแอดมิน
     if not verified:
@@ -1015,14 +1118,15 @@ async def get_order_image(
     """
     ✅ ให้ API ส่งรูปภาพสินค้าแพ็คแล้วแทนการเข้าถึงโดยตรง
     """
-    order = db.query(Order).filter(Order.order_id == order_id, Order.user_id == current_user.id).first()
+    # ดึงข้อมูลออเดอร์ตาม order_id
+    order = db.query(Order).filter(Order.order_id == order_id).first()
     
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found or you don't have permission.")
+        raise HTTPException(status_code=404, detail="Order not found")
 
     # ✅ เช็คว่ามีไฟล์ภาพจริงไหม
     if not order.image_path or not os.path.exists(order.image_path):
-        raise HTTPException(status_code=404, detail="No packed order image found.")
+        raise HTTPException(status_code=404, detail="No packed order image found")
 
     return FileResponse(order.image_path, media_type="image/jpeg")
 
