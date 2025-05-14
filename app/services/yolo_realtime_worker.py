@@ -65,7 +65,7 @@ def worker_thread():
                     for box in result.boxes.data:
                         x1, y1, x2, y2, conf, cls = box.tolist()
                         
-                        if conf > 0.3:
+                        if conf > 0.6:
                             # Get integer coordinates for drawing
                             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
                             label = yolo_model.names[int(cls)]

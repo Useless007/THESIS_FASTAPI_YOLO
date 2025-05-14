@@ -19,11 +19,9 @@ def get_executive_dashboard_data(db: Session, period: str):
         start_date = now - timedelta(days=365)
     else:
         start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_date = now
-
-    # ดึงออเดอร์ในช่วงเวลาที่กำหนด พร้อมโหลด user relationship
+    end_date = now    # ดึงออเดอร์ในช่วงเวลาที่กำหนด พร้อมโหลด customer relationship
     orders = db.query(Order)\
-        .options(joinedload(Order.user))\
+        .options(joinedload(Order.customer))\
         .filter(Order.created_at >= start_date, Order.created_at <= end_date)\
         .all()
 
@@ -89,21 +87,19 @@ def get_executive_dashboard_data(db: Session, period: str):
     top_products = [
         {"name": name, "quantity": quantity}
         for name, quantity in sorted(product_sales.items(), key=lambda x: x[1], reverse=True)
-    ][:5]
-
-    # ออเดอร์ล่าสุด (จำกัด 5 รายการ)
+    ][:5]    # ออเดอร์ล่าสุด (จำกัด 5 รายการ)
     recent_orders_query = db.query(Order)\
-        .options(joinedload(Order.user))\
+        .options(joinedload(Order.customer))\
         .filter(Order.created_at >= start_date, Order.created_at <= end_date)\
         .order_by(Order.created_at.desc())\
         .limit(5)\
         .all()
-    
+    # สร้างรายการออเดอร์ล่าสุด
     recent_orders = []
     for order in recent_orders_query:
         recent_orders.append({
             "id": order.order_id,
-            "customer": order.user.email if order.user else "Unknown",  # แก้ไขตรงนี้
+            "customer": order.customer.email if order.customer else "Unknown",  # แก้ไขตรงนี้เป็น customer แทน user
             "total": order.total,
             "status": order.status
         })
