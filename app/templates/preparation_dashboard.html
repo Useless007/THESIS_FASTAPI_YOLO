@@ -47,16 +47,27 @@
 
                 <div class="bg-white shadow-md rounded-lg overflow-hidden">
                     <div class="mb-4 p-4">
-                        <div class="relative">
-                            <input type="text" id="inventory-search" class="w-full p-2 pl-10 pr-4 border rounded-lg"
-                                placeholder="ค้นหาสินค้า...">
-                            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        <div class="flex justify-between items-center mb-4">
+                            <div class="relative flex-1 mr-4">
+                                <input type="text" id="inventory-search" class="w-full p-2 pl-10 pr-4 border rounded-lg"
+                                    placeholder="ค้นหาสินค้า...">
+                                <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <button onclick="openAddStockModal()"
+                                class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg shadow-md flex items-center ml-3">
+                                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                                     xmlns="http://www.w3.org/2000/svg">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                                        d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                                 </svg>
-                            </div>
+                                เพิ่มสินค้าคงคลัง
+                            </button>
                         </div>
                         <div class="flex flex-wrap gap-2 mt-4">
                             <button onclick="filterInventory('all')"
@@ -362,12 +373,124 @@
                     console.error('❌ Error canceling order:', error);
                     alert('เกิดข้อผิดพลาดในการยกเลิกคำสั่งซื้อ');
                 });
-        }
-
-        function closeOrderModal() {
+        } function closeOrderModal() {
             document.getElementById('orderDetailsModal').classList.add('hidden');
         }
-    </script>
+
+        // เปิด Modal สำหรับเพิ่มสินค้าคงคลัง
+        function openAddStockModal() {
+            populateProductDropdown();
+            document.getElementById('addStockModal').classList.remove('hidden');
+        }
+
+        // ปิด Modal สำหรับเพิ่มสินค้าคงคลัง
+        function closeAddStockModal() {
+            document.getElementById('addStockModal').classList.add('hidden');
+            document.getElementById('addStockForm').reset();
+        }
+
+        // เติมข้อมูลสินค้าใน dropdown
+        function populateProductDropdown() {
+            const selectElement = document.getElementById('product-select');
+            // เคลียร์ตัวเลือกที่มีอยู่
+            selectElement.innerHTML = '<option value="" selected disabled>-- เลือกสินค้า --</option>';
+
+            // เรียงลำดับสินค้าตามชื่อ
+            const sortedProducts = [...inventoryData].sort((a, b) => a.name.localeCompare(b.name));
+
+            // เพิ่มตัวเลือกสินค้าทั้งหมด
+            sortedProducts.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.product_id;
+                option.textContent = `${product.name} (ID: ${product.product_id})`;
+                selectElement.appendChild(option);
+            });
+        }
+
+        // เพิ่มสินค้าเข้าคลัง
+        function addStock() {
+            const productId = document.getElementById('product-select').value;
+            const quantity = document.getElementById('quantity-input').value;
+
+            if (!productId) {
+                alert('กรุณาเลือกสินค้า');
+                return;
+            }
+
+            if (!quantity || quantity < 1) {
+                alert('กรุณาระบุจำนวนให้ถูกต้อง');
+                return;
+            }
+
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+
+            fetch('/preparation/products/add-stock', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    product_id: parseInt(productId),
+                    quantity: parseInt(quantity)
+                })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.message || 'เกิดข้อผิดพลาดในการเพิ่มสินค้า');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    alert(data.message || 'เพิ่มสินค้าเรียบร้อยแล้ว');
+                    closeAddStockModal();
+                    loadInventoryData(); // โหลดข้อมูลสินค้าคงเหลือใหม่
+                })
+                .catch(error => {
+                    console.error('❌ Error adding stock:', error);
+                    alert(error.message || 'เกิดข้อผิดพลาดในการเพิ่มสินค้า');
+                });
+        }
+    </script> <!-- Modal สำหรับเพิ่มสินค้าเข้า stock -->
+    <div id="addStockModal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">🔢 เพิ่มสินค้าคงคลัง</h3>
+                <button onclick="closeAddStockModal()" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <form id="addStockForm" class="space-y-4">
+                <div>
+                    <label for="product-select" class="block mb-2 text-sm font-medium text-gray-700">เลือกสินค้า</label>
+                    <select id="product-select"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        <option value="" selected disabled>-- เลือกสินค้า --</option>
+                        <!-- ตัวเลือกสินค้าจะถูกเพิ่มด้วย JavaScript -->
+                    </select>
+                </div>
+                <div>
+                    <label for="quantity-input" class="block mb-2 text-sm font-medium text-gray-700">จำนวน</label>
+                    <input type="number" id="quantity-input" min="1" value="1"
+                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                </div>
+                <div class="flex justify-end space-x-2 pt-4">
+                    <button type="button" onclick="closeAddStockModal()"
+                        class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">ยกเลิก</button>
+                    <button type="button" onclick="addStock()"
+                        class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">บันทึก</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
 </body>

@@ -184,3 +184,30 @@ def get_products_inventory(
         })
     
     return products_inventory
+
+# ✅ เพิ่มสินค้าเข้าคลัง
+@router.post("/products/add-stock", response_class=JSONResponse)
+def add_product_stock(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 3))
+):
+    """
+    เพิ่มจำนวนสินค้าในคลัง
+    """
+    product_id = data.get("product_id")
+    quantity = data.get("quantity")
+    
+    if not product_id or not quantity or quantity < 1:
+        raise HTTPException(status_code=400, detail="❌ ข้อมูลไม่ถูกต้อง กรุณาระบุ ID สินค้าและจำนวนที่ต้องการเพิ่ม")
+    
+    # ค้นหาสินค้า
+    product = db.query(Product).filter(Product.product_id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="❌ ไม่พบสินค้าที่ระบุ")
+    
+    # เพิ่มจำนวนสินค้า
+    product.stock += quantity
+    db.commit()
+    
+    return {"message": f"✅ เพิ่มสินค้า {product.name} จำนวน {quantity} ชิ้น เรียบร้อยแล้ว", "current_stock": product.stock}
