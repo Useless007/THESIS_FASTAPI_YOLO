@@ -15,6 +15,7 @@ from app.models.product import Product
 from app.schemas.order import VerifyRequest
 from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
 from app.database import get_db
+from app.services.ws_manager import notify_admin, notify_preparation
 import subprocess,json,shutil,torch,os,cv2,traceback,threading,time,re,base64
 import numpy as np
 from ultralytics import YOLO
@@ -890,8 +891,13 @@ def get_packing_orders(
 def assign_order(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4)),
+    camera_id: int = None
 ):
+    # ถ้าไม่ได้ส่ง camera_id มา ให้ดึงจาก query params
+    if camera_id is None:
+        camera_id = Request.query_params.get('camera_id')
+    
     order = (
         db.query(Order)
         .options(
@@ -914,6 +920,11 @@ def assign_order(
 
     order.assigned_to = current_user.id
     order.status = "verifying"
+    
+    # บันทึก camera_id ลงในฐานข้อมูล (ถ้ามี)
+    if camera_id:
+        order.camera_id = camera_id
+        
     db.commit()
     db.refresh(order)
 
@@ -977,6 +988,11 @@ async def verify_order(
 ):
     """
     ✅ พนักงานกดยืนยันสินค้าครบหรือไม่ครบ
+    
+    เมื่อพนักงานแพ็คสินค้าพบว่าสินค้าไม่ครบ:
+    1. ระบบจะเปลี่ยนสถานะออเดอร์เป็น "confirmed" เพื่อส่งกลับให้พนักงานจัดเตรียมสินค้า
+    2. คืนจำนวนสต็อกสินค้าที่เคยถูกหักไว้ตอนพนักงานจัดเตรียมกดอนุมัติออเดอร์
+    3. ส่งการแจ้งเตือนไปยังแอดมินให้ทราบถึงสถานการณ์
     """
     order = db.query(Order).filter(Order.order_id == order_id, Order.assigned_to == current_user.id).first()
     if not order:
@@ -1037,27 +1053,38 @@ async def verify_order(
         print(f"❌ No image available and not from camera page. Referer: {referer}")
         raise HTTPException(status_code=400, detail="กรุณาตรวจจับสินค้าก่อนกดยืนยัน")
     else:
-        print(f"✅ Verification proceeding. has_image={has_image}, is_from_camera_page={is_from_camera_page}")
-
-    # ✅ ถ้าสินค้าไม่ครบ → เปลี่ยนสถานะเป็น "pending" และแจ้งเตือนแอดมิน
+        print(f"✅ Verification proceeding. has_image={has_image}, is_from_camera_page={is_from_camera_page}")    # ✅ ถ้าสินค้าไม่ครบ → เปลี่ยนสถานะเป็น "confirmed" (ส่งกลับให้พนักงานจัดเตรียม) และคืนสต็อกสินค้า
     if not verified:
-        order.status = "pending"
-        db.commit()
-
-        # ✅ ส่ง HTTP Request ไปยัง Home เพื่อให้แจ้งเตือน Admin
+        # ดึงข้อมูลรายการสินค้าในออเดอร์เพื่อคืนสต็อก
+        order_items = db.query(OrderItem).filter(OrderItem.order_id == order_id).all()
+        
+        # คืนสต็อกสินค้าที่เคยถูกหักไป
+        for item in order_items:
+            product = db.query(Product).filter(Product.product_id == item.product_id).first()
+            if product:
+                product.stock += item.quantity
+                print(f"✅ Restored {item.quantity} units to product {product.name} (ID: {product.product_id})")
+        
+        # เปลี่ยนสถานะเป็น "confirmed" เพื่อส่งกลับไปยังฝ่ายเตรียมสินค้า
+        order.status = "confirmed"
+        db.commit()        # ✅ ส่ง HTTP Request ไปยัง Home เพื่อให้แจ้งเตือน Admin และพนักงานจัดเตรียม
         try:
             url = "http://localhost:8000/admin/trigger-notify"
             # url = "https://home.jintaphas.tech/admin/trigger-notify"
             payload = {
                 "order_id": order_id,
-                "reason": "สินค้าไม่ครบ"
+                "reason": "สินค้าไม่ครบ ส่งกลับให้พนักงานจัดเตรียม"
             }
             resp = requests.post(url, json=payload, timeout=5)
             print("Notify admin response:", resp.status_code, resp.text)
+            
+            # แจ้งเตือนพนักงานจัดเตรียมด้วย WebSocket
+            await notify_preparation(order_id, "สินค้าไม่ครบ กรุณาจัดเตรียมใหม่")
+            
         except Exception as e:
-            print("Error calling home to notify admin:", e)
+            print("Error calling home to notify staff:", e)
 
-        return JSONResponse(content={"message": "Order marked as pending", "order_id": order_id, "status": "pending"})
+        return JSONResponse(content={"message": "Order sent back to preparation staff", "order_id": order_id, "status": "confirmed"})
 
     # ✅ ถ้าสินค้าครบ → อัปเดตเป็น "completed"
     order.is_verified = verified

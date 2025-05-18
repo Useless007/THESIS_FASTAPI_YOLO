@@ -1,6 +1,6 @@
 # app/routers/preparation.py
 
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, HTMLResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
@@ -10,6 +10,7 @@ from app.models.product import Product  # เพิ่ม import Product
 from app.database import get_db
 from app.services.auth import get_user_with_role_and_position_and_isActive
 from fastapi.templating import Jinja2Templates
+from app.services.ws_manager import preparation_connections
 import json
 from app.utils.product_categories import get_product_category  # เพิ่ม import get_product_category
 
@@ -211,3 +212,17 @@ def add_product_stock(
     db.commit()
     
     return {"message": f"✅ เพิ่มสินค้า {product.name} จำนวน {quantity} ชิ้น เรียบร้อยแล้ว", "current_stock": product.stock}
+
+@router.websocket("/notifications")
+async def preparation_notifications(websocket: WebSocket):
+    """
+    ✅ WebSocket สำหรับแจ้งเตือนพนักงานจัดเตรียมเมื่อมีออเดอร์ใหม่หรือมีการเปลี่ยนแปลงในออเดอร์
+    """
+    await websocket.accept()
+    preparation_connections.append(websocket)
+
+    try:
+        while True:
+            await websocket.receive_text()  # ✅ รอข้อความจาก Client (แต่อาจไม่ต้องใช้)
+    except WebSocketDisconnect:
+        preparation_connections.remove(websocket)  # ✅ ลบ Connection ถ้าพนักงานหลุดออกจาก WebSocket

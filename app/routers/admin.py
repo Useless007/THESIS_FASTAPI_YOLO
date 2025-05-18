@@ -4,7 +4,7 @@ import json
 from fastapi import APIRouter, Depends, Request, HTTPException, WebSocket, WebSocketDisconnect, Query
 from typing import List
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from app.services.ws_manager import NotifyPayload, notify_admin
+from app.services.ws_manager import NotifyPayload, notify_admin, preparation_connections, notify_preparation
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, cast, Date, and_, or_
@@ -292,22 +292,33 @@ async def admin_notifications(websocket: WebSocket):
 @router.post("/trigger-notify")
 async def trigger_notify(payload: NotifyPayload, request: Request):
     """
-    ✅ Endpoint ให้ Thesis-API เรียกเพื่อให้ Home แจ้งเตือน Admin ผ่าน WebSocket
+    ✅ Endpoint ให้ Thesis-API เรียกเพื่อให้ Home แจ้งเตือน Admin และพนักงานจัดเตรียมผ่าน WebSocket
     """
     message = {
         "order_id": payload.order_id,
         "message": f"⚠️ ออเดอร์ #{payload.order_id} เป็น PENDING - {payload.reason}",
     }
 
-    # ตรวจสอบว่ามี Admin Online หรือไม่
-    if not admin_connections:
-        return {"status": "no_admin_online"}
+    # ตรวจสอบว่ามี Admin หรือพนักงานจัดเตรียม Online หรือไม่
+    admin_online = len(admin_connections) > 0
+    preparation_online = len(preparation_connections) > 0
+    
+    if not (admin_online or preparation_online):
+        return {"status": "no_staff_online"}
 
     # ส่งข้อความแจ้งเตือนไปให้ Admin ทุกคนที่เชื่อม WebSocket อยู่
     for conn in admin_connections:
         await conn.send_json(message)
+        
+    # ส่งข้อความแจ้งเตือนไปให้พนักงานจัดเตรียมทุกคนที่เชื่อม WebSocket อยู่
+    # ใช้ฟังก์ชัน notify_preparation ที่เราสร้างไว้
+    await notify_preparation(payload.order_id, payload.reason)
 
-    return {"status": "notified", "sent_to": len(admin_connections)}
+    return {
+        "status": "notified", 
+        "sent_to_admin": len(admin_connections),
+        "sent_to_preparation": len(preparation_connections)
+    }
 
 
 # Route สำหรับอนุมัติออเดอร์

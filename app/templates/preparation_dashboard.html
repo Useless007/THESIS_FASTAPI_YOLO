@@ -15,9 +15,13 @@
             <h1 class="text-xl font-bold">🛠️ Preparation Staff Dashboard</h1>
             <a href="/" class="text-blue-500 hover:underline">กลับสู่หน้าแรก</a>
         </div>
-    </nav>
-
-    <main class="p-4 md:p-8">
+    </nav>    <main class="p-4 md:p-8">
+        <!-- แจ้งเตือนออเดอร์ที่มีปัญหา -->
+        <div class="mx-auto max-w-7xl mb-6">
+            <h2 class="text-2xl font-bold mb-4">📢 แจ้งเตือนออเดอร์ที่ต้องจัดเตรียมใหม่</h2>
+            <div id="notifications" class="mb-6 space-y-2"></div>
+        </div>
+        
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- คำสั่งซื้อที่รอการตรวจสอบ -->
             <div class="max-w-full py-6">
@@ -387,9 +391,7 @@
         function closeAddStockModal() {
             document.getElementById('addStockModal').classList.add('hidden');
             document.getElementById('addStockForm').reset();
-        }
-
-        // เติมข้อมูลสินค้าใน dropdown
+        }        // เติมข้อมูลสินค้าใน dropdown
         function populateProductDropdown() {
             const selectElement = document.getElementById('product-select');
             // เคลียร์ตัวเลือกที่มีอยู่
@@ -405,6 +407,60 @@
                 option.textContent = `${product.name} (ID: ${product.product_id})`;
                 selectElement.appendChild(option);
             });
+
+            // เพิ่ม event listener เพื่อแสดงรูปภาพเมื่อเลือกสินค้า
+            selectElement.addEventListener('change', updateProductImage);
+
+            // เคลียร์รูปภาพ
+            hideProductImage();
+        }
+
+        // อัพเดทรูปภาพสินค้าเมื่อเลือกจาก dropdown
+        function updateProductImage() {
+            const productId = document.getElementById('product-select').value;
+            const imageContainer = document.getElementById('product-image-container');
+            const productImage = document.getElementById('product-image');
+            const placeholder = document.getElementById('product-image-placeholder');
+            const stockInfo = document.getElementById('product-stock-info');
+
+            if (!productId) {
+                hideProductImage();
+                return;
+            }
+
+            // หาข้อมูลสินค้าจาก id
+            const product = inventoryData.find(p => p.product_id == productId);
+            if (product && product.image_path) {
+                // แสดงรูปภาพ
+                productImage.src = product.image_path;
+                productImage.alt = product.name;
+                productImage.classList.remove('hidden');
+                placeholder.classList.add('hidden');
+
+                // แสดงข้อมูลสต็อกปัจจุบัน
+                let stockInfoText = `สต็อกปัจจุบัน: <span class="${getStockClass(product.stock)}">${product.stock} ชิ้น</span>`;
+                stockInfo.innerHTML = stockInfoText;
+            } else {
+                hideProductImage();
+            }
+        }
+
+        // ซ่อนรูปภาพสินค้า
+        function hideProductImage() {
+            const productImage = document.getElementById('product-image');
+            const placeholder = document.getElementById('product-image-placeholder');
+            const stockInfo = document.getElementById('product-stock-info');
+
+            productImage.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+            stockInfo.textContent = '';
+        }
+
+        // กำหนด class สำหรับจำนวนสต็อก
+        function getStockClass(stock) {
+            if (stock <= 0) return 'font-bold text-red-600';
+            if (stock <= 5) return 'font-bold text-yellow-600';
+            return 'font-bold text-green-600';
         }
 
         // เพิ่มสินค้าเข้าคลัง
@@ -457,7 +513,7 @@
     </script> <!-- Modal สำหรับเพิ่มสินค้าเข้า stock -->
     <div id="addStockModal"
         class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center z-50">
-        <div class="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-2xl w-full">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-xl font-bold">🔢 เพิ่มสินค้าคงคลัง</h3>
                 <button onclick="closeAddStockModal()" class="text-gray-500 hover:text-gray-700">
@@ -468,31 +524,121 @@
                     </svg>
                 </button>
             </div>
-            <form id="addStockForm" class="space-y-4">
-                <div>
-                    <label for="product-select" class="block mb-2 text-sm font-medium text-gray-700">เลือกสินค้า</label>
-                    <select id="product-select"
-                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                        <option value="" selected disabled>-- เลือกสินค้า --</option>
-                        <!-- ตัวเลือกสินค้าจะถูกเพิ่มด้วย JavaScript -->
-                    </select>
+            <div class="grid grid-cols-3 gap-4">
+                <!-- รูปภาพสินค้าทางซ้ายมือ -->
+                <div class="col-span-1 flex flex-col items-center justify-center">
+                    <div id="product-image-container"
+                        class="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center mb-2 overflow-hidden">
+                        <div id="product-image-placeholder" class="text-center p-2">
+                            <svg class="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                            <p class="text-sm text-gray-500">เลือกสินค้าเพื่อดูรูปภาพ</p>
+                        </div>
+                        <img id="product-image" class="hidden w-full h-full object-contain" src="" alt="รูปภาพสินค้า">
+                    </div>
+                    <p id="product-stock-info" class="text-sm text-center text-gray-500 mt-2"></p>
                 </div>
-                <div>
-                    <label for="quantity-input" class="block mb-2 text-sm font-medium text-gray-700">จำนวน</label>
-                    <input type="number" id="quantity-input" min="1" value="1"
-                        class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+
+                <!-- ฟอร์มทางขวามือ -->
+                <div class="col-span-2">
+                    <form id="addStockForm" class="space-y-4">
+                        <div>
+                            <label for="product-select"
+                                class="block mb-2 text-sm font-medium text-gray-700">เลือกสินค้า</label>
+                            <select id="product-select"
+                                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                                <option value="" selected disabled>-- เลือกสินค้า --</option>
+                                <!-- ตัวเลือกสินค้าจะถูกเพิ่มด้วย JavaScript -->
+                            </select>
+                        </div>
+                        <div>
+                            <label for="quantity-input"
+                                class="block mb-2 text-sm font-medium text-gray-700">จำนวน</label>
+                            <input type="number" id="quantity-input" min="1" value="1"
+                                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        </div>
+                        <div class="flex justify-end space-x-2 pt-4">
+                            <button type="button" onclick="closeAddStockModal()"
+                                class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">ยกเลิก</button>
+                            <button type="button" onclick="addStock()"
+                                class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">บันทึก</button>
+                        </div>
+                    </form>
                 </div>
-                <div class="flex justify-end space-x-2 pt-4">
-                    <button type="button" onclick="closeAddStockModal()"
-                        class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">ยกเลิก</button>
-                    <button type="button" onclick="addStock()"
-                        class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">บันทึก</button>
-                </div>
-            </form>
-        </div>
-    </div>
+            </div>
+        </div>    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
+
+    <!-- WebSocket สำหรับการแจ้งเตือนแบบ Real-time -->
+    <script>
+        const socket = new WebSocket("wss://localhost:8001/preparation/notifications");
+        // const socket = new WebSocket("wss://home.jintaphas.tech/preparation/notifications");
+
+        socket.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+            showNotification(data.order_id, data.message);
+        };
+
+        function showNotification(orderId, message) {
+            const notifications = document.getElementById("notifications");
+            const notification = document.createElement("div");
+
+            notification.className = "bg-yellow-500 text-white p-3 rounded-md my-2 shadow-md";
+            notification.innerHTML = `
+                <strong>${message}</strong>
+                <button class="ml-2 bg-white text-yellow-500 px-2 py-1 rounded" onclick="checkOrder(${orderId})">ตรวจสอบ</button>
+            `;
+
+            notifications.appendChild(notification);
+            
+            // เล่นเสียงแจ้งเตือนหรือการแจ้งเตือนบนระบบปฏิบัติการ (ถ้าต้องการ)
+            playNotificationSound();
+        }
+
+        function checkOrder(orderId) {
+            // เปิด Modal รายละเอียดออเดอร์ (ถ้ามี) หรือโหลดข้อมูลออเดอร์ใหม่
+            loadConfirmedOrders();
+            
+            // ส่งคำขอข้อมูลออเดอร์เฉพาะ
+            viewOrderDetails(orderId);
+        }
+        
+        // เล่นเสียงแจ้งเตือน
+        function playNotificationSound() {
+            try {
+                // ถ้ามีไฟล์เสียงแจ้งเตือน
+                // const audio = new Audio('/static/assets/notification.mp3');
+                // audio.play();
+                
+                // หรือใช้ Web Notifications API
+                if (Notification.permission === "granted") {
+                    new Notification("มีคำสั่งซื้อใหม่ที่ต้องจัดเตรียม", {
+                        icon: "/static/favicon.ico",
+                        body: "มีรายการสั่งซื้อที่ต้องการให้คุณตรวจสอบ"
+                    });
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            new Notification("มีคำสั่งซื้อใหม่ที่ต้องจัดเตรียม", {
+                                icon: "/static/favicon.ico",
+                                body: "มีรายการสั่งซื้อที่ต้องการให้คุณตรวจสอบ"
+                            });
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error("❌ ไม่สามารถเล่นเสียงแจ้งเตือนได้:", error);
+            }
+        }
+    </script>
+    
+    <!-- ✅ พื้นที่แสดงแจ้งเตือน แบบลอยด้านบน -->
+    <div id="float-notifications" class="fixed top-4 right-4 w-96 z-50"></div>
 </body>
 
 </html>
