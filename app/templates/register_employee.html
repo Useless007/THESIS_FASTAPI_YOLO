@@ -5,92 +5,134 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .required-field::after {
+            content: ' *';
+            color: red;
+            font-weight: bold;
+        }
+
+        .field-error {
+            color: red;
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+        }
+
+        .password-match {
+            color: green;
+        }
+
+        .password-not-match {
+            color: red;
+        }
+    </style>
     <title>ลงทะเบียนสำหรับพนักงาน</title>
 </head>
 
 <body class="bg-gray-100">
     <div class="min-h-screen flex items-center justify-center">
+
         <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-            <h2 class="text-2xl font-bold text-center mb-6">ลงทะเบียนสำหรับพนักงาน</h2>
+            <div class="text-center mb-6">
+                <a href="/" class="flex items-center mb-6 text-2xl font-semibold text-gray-900 dark:text-white">
+                    <img class="mx-auto h-32 w-auto" src="/static/assets/Kunishi3.png" alt="logo">
+                </a>
+                <h2 class="mt-4 text-2xl font-bold text-gray-900">ลงทะเบียนสำหรับพนักงาน</h2>
+                <p class="mt-2 text-sm text-gray-600">กรุณากรอกข้อมูลให้ครบถ้วน <span
+                        class="text-red-500 font-bold">ทุกช่อง</span></p>
+            </div>
 
             {% if error %}
             <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4" role="alert">
                 <p>{{ error }}</p>
             </div>
-            {% endif %}
-
-            <form action="/employee-register" method="post" class="space-y-4">
+            {% endif %} <form action="/employee-register" method="post" class="space-y-4" id="registerForm" novalidate>
                 <div>
-                    <label for="name" class="block text-sm font-medium text-gray-700">ชื่อ-นามสกุล</label>
+                    <label for="name"
+                        class="block text-sm font-medium text-gray-700 required-field">ชื่อ-นามสกุล</label>
                     <input type="text" id="name" name="name" required
                         class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <div id="nameError" class="field-error hidden">กรุณากรอกชื่อ-นามสกุล</div>
                 </div>
 
                 <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700">อีเมล</label>
+                    <label for="email" class="block text-sm font-medium text-gray-700 required-field">อีเมล</label>
                     <input type="email" id="email" name="email" required
                         class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <div id="emailError" class="field-error hidden">กรุณากรอกอีเมลที่ถูกต้อง</div>
                 </div>
-
                 <div>
-                    <label for="phone" class="block text-sm font-medium text-gray-700">เบอร์โทรศัพท์</label>
-                    <input type="tel" id="phone" name="phone"
+                    <label for="phone"
+                        class="block text-sm font-medium text-gray-700 required-field">เบอร์โทรศัพท์</label>
+                    <input type="tel" id="phone" name="phone" required
                         class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <div id="phoneError" class="field-error hidden">กรุณากรอกเบอร์โทรศัพท์</div>
                 </div>
-
-                <div class="border-t pt-4 mt-4">
-                    <h3 class="text-lg font-medium text-gray-800 mb-2">ข้อมูลที่อยู่</h3>
-
+                <div class="pt-4 mt-4">
                     <div class="space-y-3">
                         <div>
-                            <label for="house_number" class="block text-sm font-medium text-gray-700">บ้านเลขที่</label>
+                            <label for="house_number"
+                                class="block text-sm font-medium text-gray-700 required-field">บ้านเลขที่</label>
                             <input type="text" id="house_number" name="house_number" required
                                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <div id="houseNumberError" class="field-error hidden">กรุณากรอกบ้านเลขที่</div>
                         </div>
-
                         <div>
-                            <label for="village_no" class="block text-sm font-medium text-gray-700">หมู่ที่</label>
-                            <input type="text" id="village_no" name="village_no"
+                            <label for="village_no"
+                                class="block text-sm font-medium text-gray-700 required-field">หมู่ที่</label>
+                            <input type="text" id="village_no" name="village_no" required
                                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <div id="villageNoError" class="field-error hidden">กรุณากรอกหมู่ที่</div>
                         </div>
 
                         <div>
-                            <label for="subdistrict" class="block text-sm font-medium text-gray-700">ตำบล/แขวง</label>
+                            <label for="subdistrict"
+                                class="block text-sm font-medium text-gray-700 required-field">ตำบล/แขวง</label>
                             <input type="text" id="subdistrict" name="subdistrict" required
                                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <div id="subdistrictError" class="field-error hidden">กรุณากรอกตำบล/แขวง</div>
                         </div>
 
                         <div>
-                            <label for="district" class="block text-sm font-medium text-gray-700">อำเภอ/เขต</label>
+                            <label for="district"
+                                class="block text-sm font-medium text-gray-700 required-field">อำเภอ/เขต</label>
                             <input type="text" id="district" name="district" required
                                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <div id="districtError" class="field-error hidden">กรุณากรอกอำเภอ/เขต</div>
                         </div>
 
                         <div>
-                            <label for="province" class="block text-sm font-medium text-gray-700">จังหวัด</label>
+                            <label for="province"
+                                class="block text-sm font-medium text-gray-700 required-field">จังหวัด</label>
                             <input type="text" id="province" name="province" required
                                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <div id="provinceError" class="field-error hidden">กรุณากรอกจังหวัด</div>
                         </div>
 
                         <div>
                             <label for="postal_code"
-                                class="block text-sm font-medium text-gray-700">รหัสไปรษณีย์</label>
+                                class="block text-sm font-medium text-gray-700 required-field">รหัสไปรษณีย์</label>
                             <input type="text" id="postal_code" name="postal_code" required
                                 class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                            <div id="postalCodeError" class="field-error hidden">กรุณากรอกรหัสไปรษณีย์</div>
                         </div>
                     </div>
                 </div>
-
                 <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700">รหัสผ่าน</label>
+                    <label for="password"
+                        class="block text-sm font-medium text-gray-700 required-field">รหัสผ่าน</label>
                     <input type="password" id="password" name="password" required
                         class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <div id="passwordError" class="field-error hidden">กรุณากรอกรหัสผ่าน</div>
                 </div>
 
                 <div>
-                    <label for="confirmPassword" class="block text-sm font-medium text-gray-700">ยืนยันรหัสผ่าน</label>
+                    <label for="confirmPassword"
+                        class="block text-sm font-medium text-gray-700 required-field">ยืนยันรหัสผ่าน</label>
                     <input type="password" id="confirmPassword" name="confirmPassword" required
                         class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                    <div id="confirmPasswordError" class="field-error hidden">กรุณายืนยันรหัสผ่าน</div>
+                    <div id="passwordMatchStatus" class="mt-1 text-sm"></div>
                 </div>
 
                 <div class="pt-2">
@@ -117,16 +159,138 @@
             </div>
         </div>
     </div>
+    <script>        // รายการช่องที่จำเป็นต้องกรอก
+        const requiredFields = [
+            { id: 'name', errorId: 'nameError' },
+            { id: 'email', errorId: 'emailError' },
+            { id: 'phone', errorId: 'phoneError' },
+            { id: 'house_number', errorId: 'houseNumberError' },
+            { id: 'village_no', errorId: 'villageNoError' },
+            { id: 'subdistrict', errorId: 'subdistrictError' },
+            { id: 'district', errorId: 'districtError' },
+            { id: 'province', errorId: 'provinceError' },
+            { id: 'postal_code', errorId: 'postalCodeError' },
+            { id: 'password', errorId: 'passwordError' },
+            { id: 'confirmPassword', errorId: 'confirmPasswordError' }
+        ];
 
-    <script>
-        // ตรวจสอบว่ารหัสผ่านและยืนยันรหัสผ่านตรงกัน
-        document.querySelector('form').addEventListener('submit', function (e) {
-            var password = document.getElementById('password').value;
-            var confirmPassword = document.getElementById('confirmPassword').value;
+        // ตรวจสอบอีเมล
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
 
-            if (password !== confirmPassword) {
+        // ตรวจสอบการกรอกข้อมูลทุกครั้งที่มีการเปลี่ยนแปลง
+        requiredFields.forEach(field => {
+            const input = document.getElementById(field.id);
+            const errorElement = document.getElementById(field.errorId); input.addEventListener('input', function () {
+                // ตรวจสอบอีเมล หรือช่องรหัสผ่าน ให้ตรวจสอบทันทีที่มีการพิมพ์
+                if (field.id === 'email' || field.id === 'password' || field.id === 'confirmPassword') {
+                    validateField(field, this);
+                } else {
+                    // ช่องอื่นๆ ซ่อนข้อความแจ้งเตือนเมื่อเริ่มพิมพ์
+                    document.getElementById(field.errorId).classList.add('hidden');
+                }
+            });
+
+            // ตรวจสอบเมื่อคลิกออกจากช่อง
+            input.addEventListener('blur', function () {
+                validateField(field, this);
+            });
+        });        // ตรวจสอบเมื่อโหลดหน้า
+        window.addEventListener('load', function () {
+            // ไม่ต้องแสดงข้อความแจ้งเตือนเมื่อโหลดหน้า
+            // requiredFields.forEach(field => {
+            //     const input = document.getElementById(field.id);
+            //     const errorElement = document.getElementById(field.errorId);
+            //
+            //     if (input.value.trim() === '') {
+            //         errorElement.classList.remove('hidden');
+            //     }
+            // });
+
+            // เพิ่ม event blur เพื่อตรวจสอบเมื่อคลิกออกจากช่อง
+            requiredFields.forEach(field => {
+                const input = document.getElementById(field.id);
+                input.addEventListener('blur', function () {
+                    validateField(field, this);
+                });
+            });
+        });        // ฟังก์ชันสำหรับตรวจสอบความถูกต้องของฟิลด์
+        function validateField(field, input) {
+            const errorElement = document.getElementById(field.errorId);
+
+            if (field.id === 'email') {
+                if (input.value.trim() === '' || !validateEmail(input.value)) {
+                    errorElement.classList.remove('hidden');
+                } else {
+                    errorElement.classList.add('hidden');
+                }
+            } else {
+                if (input.value.trim() === '') {
+                    errorElement.classList.remove('hidden');
+                } else {
+                    errorElement.classList.add('hidden');
+                }
+            }
+        }
+
+        // ตรวจสอบรหัสผ่าน
+        const passwordInput = document.getElementById('password');
+        const confirmPasswordInput = document.getElementById('confirmPassword');
+        const passwordMatchStatus = document.getElementById('passwordMatchStatus');
+
+        function checkPasswordMatch() {
+            if (confirmPasswordInput.value === '') {
+                passwordMatchStatus.textContent = '';
+                passwordMatchStatus.classList.remove('password-match', 'password-not-match');
+            } else if (passwordInput.value === confirmPasswordInput.value) {
+                passwordMatchStatus.textContent = 'รหัสผ่านตรงกัน';
+                passwordMatchStatus.classList.add('password-match');
+                passwordMatchStatus.classList.remove('password-not-match');
+            } else {
+                passwordMatchStatus.textContent = 'รหัสผ่านไม่ตรงกัน';
+                passwordMatchStatus.classList.add('password-not-match');
+                passwordMatchStatus.classList.remove('password-match');
+            }
+        }
+
+        passwordInput.addEventListener('input', checkPasswordMatch);
+        confirmPasswordInput.addEventListener('input', checkPasswordMatch);
+
+        // ตรวจสอบก่อนส่งฟอร์ม
+        document.getElementById('registerForm').addEventListener('submit', function (e) {
+            let hasError = false;
+
+            // ตรวจสอบช่องที่จำเป็นทั้งหมด
+            requiredFields.forEach(field => {
+                const input = document.getElementById(field.id);
+                const errorElement = document.getElementById(field.errorId);
+
+                if (field.id === 'email') {
+                    if (input.value.trim() === '' || !validateEmail(input.value)) {
+                        errorElement.classList.remove('hidden');
+                        hasError = true;
+                    }
+                } else {
+                    if (input.value.trim() === '') {
+                        errorElement.classList.remove('hidden');
+                        hasError = true;
+                    }
+                }
+            });
+
+            // ตรวจสอบรหัสผ่านตรงกัน
+            if (passwordInput.value !== confirmPasswordInput.value) {
+                passwordMatchStatus.textContent = 'รหัสผ่านไม่ตรงกัน';
+                passwordMatchStatus.classList.add('password-not-match');
+                passwordMatchStatus.classList.remove('password-match');
+                hasError = true;
+            }
+
+            if (hasError) {
                 e.preventDefault();
-                alert('รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน');
+                window.scrollTo(0, 0);
             }
         });
     </script>

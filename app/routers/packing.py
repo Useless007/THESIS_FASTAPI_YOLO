@@ -16,6 +16,7 @@ from app.schemas.order import VerifyRequest
 from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
 from app.database import get_db
 from app.services.ws_manager import notify_admin, notify_preparation
+from datetime import datetime
 import subprocess,json,shutil,torch,os,cv2,traceback,threading,time,re,base64
 import numpy as np
 from ultralytics import YOLO
@@ -892,11 +893,7 @@ def assign_order(
     order_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4)),
-    camera_id: int = None
 ):
-    # ถ้าไม่ได้ส่ง camera_id มา ให้ดึงจาก query params
-    if camera_id is None:
-        camera_id = Request.query_params.get('camera_id')
     
     order = (
         db.query(Order)
@@ -921,10 +918,7 @@ def assign_order(
     order.assigned_to = current_user.id
     order.status = "verifying"
     
-    # บันทึก camera_id ลงในฐานข้อมูล (ถ้ามี)
-    if camera_id:
-        order.camera_id = camera_id
-        
+    order.updated_at = datetime.utcnow()  # บันทึกเวลาที่ทำการ assign
     db.commit()
     db.refresh(order)
 
@@ -983,6 +977,7 @@ async def verify_order(
     request: Request,
     verified: bool = Form(...),
     file: UploadFile = File(None),
+    camera_id: int = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
 ):
@@ -1004,8 +999,7 @@ async def verify_order(
     # เพิ่ม log เพื่อตรวจสอบ request
     print(f"Request headers: {request.headers}")
     print(f"Referer: {request.headers.get('referer', 'No referer')}")
-    
-    # กรณีมีไฟล์รูปภาพถูกส่งมา
+      # กรณีมีไฟล์รูปภาพถูกส่งมา
     if file and file.filename:
         has_image = True
         upload_dir = "uploads/packed_orders"
@@ -1014,7 +1008,12 @@ async def verify_order(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         order.image_path = file_path
-        print(f"✅ Image uploaded from form data: {file_path}")
+        # ถ้ามีการส่ง camera_id มาด้วย ให้บันทึกลงในออเดอร์
+        if camera_id:
+            order.camera_id = camera_id
+            print(f"✅ Image uploaded from form data with camera_id {camera_id}: {file_path}")
+        else:
+            print(f"✅ Image uploaded from form data (no camera_id): {file_path}")
     
     # กรณีที่มีรูปภาพเก็บอยู่แล้ว
     elif order.image_path and os.path.exists(order.image_path):
@@ -1040,7 +1039,9 @@ async def verify_order(
                         cv2.imwrite(file_path, frame)
                         order.image_path = file_path
                         has_image = True
-                        print(f"✅ Captured new image from camera: {file_path}")
+                        # บันทึก camera_id ที่ใช้ในการถ่ายภาพลงในออเดอร์
+                        order.camera_id = camera_id
+                        print(f"✅ Captured new image from camera {camera_id}: {file_path}")
                         break
         except Exception as e:
             print(f"❌ Error capturing frame from camera: {str(e)}")
@@ -1065,11 +1066,12 @@ async def verify_order(
                 product.stock += item.quantity
                 print(f"✅ Restored {item.quantity} units to product {product.name} (ID: {product.product_id})")
         
-        # เปลี่ยนสถานะเป็น "confirmed" เพื่อส่งกลับไปยังฝ่ายเตรียมสินค้า
+    # เปลี่ยนสถานะเป็น "confirmed" เพื่อส่งกลับไปยังฝ่ายเตรียมสินค้า
         order.status = "confirmed"
+        order.updated_at = datetime.utcnow()  # บันทึกเวลาที่ทำการยืนยัน
         db.commit()        # ✅ ส่ง HTTP Request ไปยัง Home เพื่อให้แจ้งเตือน Admin และพนักงานจัดเตรียม
         try:
-            url = "http://localhost:8000/admin/trigger-notify"
+            url = "http://192.168.0.44:8000/admin/trigger-notify"
             # url = "https://home.jintaphas.tech/admin/trigger-notify"
             payload = {
                 "order_id": order_id,
@@ -1081,17 +1083,24 @@ async def verify_order(
             # แจ้งเตือนพนักงานจัดเตรียมด้วย WebSocket
             await notify_preparation(order_id, "สินค้าไม่ครบ กรุณาจัดเตรียมใหม่")
             
-        except Exception as e:
-            print("Error calling home to notify staff:", e)
-
-        return JSONResponse(content={"message": "Order sent back to preparation staff", "order_id": order_id, "status": "confirmed"})
-
-    # ✅ ถ้าสินค้าครบ → อัปเดตเป็น "completed"
+        except Exception as e:            print("Error calling home to notify staff:", e)
+        return JSONResponse(content={
+            "message": "Order sent back to preparation staff", 
+            "order_id": order_id, 
+            "status": "confirmed",
+            "camera_id": order.camera_id
+        })    # ✅ ถ้าสินค้าครบ → อัปเดตเป็น "completed"
     order.is_verified = verified
     order.status = "completed"
+    order.updated_at = datetime.utcnow()  # บันทึกเวลาที่ทำการยืนยัน
     db.commit()
 
-    return JSONResponse(content={"message": "Order verification updated", "order_id": order_id, "status": "completed"})
+    return JSONResponse(content={
+        "message": "Order verification updated", 
+        "order_id": order_id, 
+        "status": "completed",
+        "camera_id": order.camera_id
+    })
 
 @router.get("/orders/current", response_class=JSONResponse)
 def get_current_order(
@@ -1123,18 +1132,18 @@ def get_current_order(
             "quantity": item.quantity,
             "price": item.price_at_order,
             "total": item.total_item_price,
-            "image_path": item.product.image_path if item.product else None
-        }
+            "image_path": item.product.image_path if item.product else None        }
         for item in order.order_items
     ]
-
+    
     return JSONResponse(content={
         "order_id": order.order_id,
         "customer_email": order.customer.email if order.customer else None,
         "total_price": order.total,
         "items": formatted_items,
         "created_at": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-        "image_path": order.image_path
+        "image_path": order.image_path,
+        "camera_id": order.camera_id  # เพิ่มข้อมูล camera_id
     })
 
 @router.get("/orders/{order_id}/image", response_class=FileResponse)

@@ -231,7 +231,7 @@
             if (!token) return;
 
             try {
-                const response = await fetch(`http://localhost:8001/packing/orders/current`, {
+                const response = await fetch(`http://192.168.0.44:8001/packing/orders/current`, {
                     // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/current`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -368,42 +368,90 @@
                 document.getElementById('detect-status').className = 'detect-status error';
                 document.getElementById('dual-stream-switch').checked = false;
             };
-        }
-
-        // ✅ ฟังก์ชันตรวจสอบว่าสินค้าที่ตรวจจับได้ตรงกับรายการในออเดอร์ปัจจุบันหรือไม่
+        }        // ✅ ฟังก์ชันตรวจสอบว่าสินค้าที่ตรวจจับได้ตรงกับรายการในออเดอร์ปัจจุบันหรือไม่
         function checkOrderItemsMatch(detectedItems) {
             // อ่านข้อมูลออเดอร์ปัจจุบันจาก localStorage
             const currentOrderId = localStorage.getItem("currentOrderId");
             if (!currentOrderId) {
-                return; // ไม่มีออเดอร์ที่กำลังทำงานอยู่
+                console.log("⚠️ ไม่พบ currentOrderId ใน localStorage");
+                return;
             }
 
             // ดึง div ที่แสดงข้อมูลออเดอร์
             const currentOrderDiv = document.getElementById('current-order');
-            const orderItems = currentOrderDiv.querySelectorAll('li strong');
+            const orderItemElements = currentOrderDiv.querySelectorAll('li');
 
-            if (!orderItems || orderItems.length === 0) {
-                return; // ไม่มีข้อมูลรายการสินค้า
+            if (!orderItemElements || orderItemElements.length === 0) {
+                console.log("⚠️ ไม่พบรายการสินค้าในออเดอร์");
+                return;
             }
+
+            // สร้าง object เก็บรายการสินค้าในออเดอร์และจำนวน
+            let orderItemsWithQuantity = {};
+
+            // วนลูปเก็บข้อมูลสินค้าและจำนวนจากออเดอร์
+            orderItemElements.forEach(item => {
+                const productNameElement = item.querySelector('strong');
+                if (!productNameElement) return;
+
+                const productName = productNameElement.textContent.trim();
+                // ดึงจำนวนสินค้าจากข้อความ (เช่น "Arduino UNO - 2 ชิ้น")
+                const itemText = item.textContent.trim();
+                const quantityMatch = itemText.match(/(\d+)\s+ชิ้น/);
+                const quantity = quantityMatch ? parseInt(quantityMatch[1]) : 1;
+
+                orderItemsWithQuantity[productName] = quantity;
+            });
 
             // ตรวจสอบว่าทุกรายการในออเดอร์ถูกตรวจพบหรือไม่
             let allItemsFound = true;
             let foundItems = {};
+            let extraItems = {};
 
-            // วนลูปตรวจสอบรายการสินค้าในออเดอร์
-            orderItems.forEach(item => {
-                const productName = item.textContent.trim();
+            // ตรวจสอบว่ามีสินค้าใดในออเดอร์ที่ไม่ถูกตรวจพบ
+            Object.keys(orderItemsWithQuantity).forEach(productName => {
+                const orderQuantity = orderItemsWithQuantity[productName];
+                let detectedQuantity = 0;
 
-                // ตรวจสอบว่าชื่อสินค้าอยู่ในรายการที่ตรวจจับได้หรือไม่
-                const isDetected = Object.keys(detectedItems).some(label =>
-                    label.toLowerCase().includes(productName.toLowerCase()) ||
-                    productName.toLowerCase().includes(label.toLowerCase())
-                );
+                // หาจำนวนที่ตรวจพบของสินค้าชนิดนี้
+                Object.keys(detectedItems).forEach(label => {
+                    if (label.toLowerCase().includes(productName.toLowerCase()) ||
+                        productName.toLowerCase().includes(label.toLowerCase())) {
+                        detectedQuantity = detectedItems[label];
+                    }
+                });
 
-                if (!isDetected) {
+                if (detectedQuantity === 0) {
+                    // ไม่พบสินค้าชิ้นนี้เลย
                     allItemsFound = false;
+                } else if (detectedQuantity < orderQuantity) {
+                    // พบสินค้าแต่จำนวนไม่ครบ
+                    allItemsFound = false;
+                    foundItems[productName] = detectedQuantity;
+                } else if (detectedQuantity > orderQuantity) {
+                    // พบสินค้าแต่จำนวนเกิน
+                    foundItems[productName] = orderQuantity;
+                    extraItems[productName] = detectedQuantity - orderQuantity;
                 } else {
-                    foundItems[productName] = true;
+                    // พบสินค้าและจำนวนพอดี
+                    foundItems[productName] = detectedQuantity;
+                }
+            });
+
+            // ตรวจสอบว่ามีสินค้าที่ตรวจพบแต่ไม่อยู่ในออเดอร์หรือไม่
+            Object.keys(detectedItems).forEach(detectedLabel => {
+                let isInOrder = false;
+
+                Object.keys(orderItemsWithQuantity).forEach(orderItem => {
+                    if (detectedLabel.toLowerCase().includes(orderItem.toLowerCase()) ||
+                        orderItem.toLowerCase().includes(detectedLabel.toLowerCase())) {
+                        isInOrder = true;
+                    }
+                });
+
+                if (!isInOrder) {
+                    // พบสินค้าที่ไม่อยู่ในออเดอร์
+                    extraItems[detectedLabel] = detectedItems[detectedLabel];
                 }
             });
 
@@ -424,7 +472,24 @@
             // บันทึกเวลาล่าสุดที่อัพเดต DOM
             verificationStatus.dataset.lastUpdateTime = now;
 
-            if (allItemsFound && Object.keys(foundItems).length > 0) {
+            // สร้าง HTML สำหรับแสดงสินค้าที่เกินมา (ถ้ามี)
+            let extraItemsHtml = '';
+            if (Object.keys(extraItems).length > 0) {
+                extraItemsHtml = `
+                    <div class="mt-4 p-3 bg-yellow-100 border border-yellow-400 rounded-md">
+                        <p class="font-bold text-yellow-700">⚠️ พบสินค้าเกินจากออเดอร์:</p>
+                        <ul class="mt-2 text-yellow-800">
+                `;
+
+                Object.keys(extraItems).forEach(item => {
+                    extraItemsHtml += `<li>- ${item}: <span class="font-bold">${extraItems[item]} ชิ้น</span></li>`;
+                });
+
+                extraItemsHtml += `
+                        </ul>
+                    </div>
+                `;
+            } if (allItemsFound && Object.keys(foundItems).length > 0) {
                 verificationStatus.innerHTML = `
                     <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 my-4 rounded-md shadow-sm">
                         <div class="flex items-center">
@@ -435,14 +500,25 @@
                         </div>
                         <p class="ml-8 text-sm">คุณสามารถยืนยันการบรรจุสินค้าได้</p>
                     </div>
+                    ${extraItemsHtml}
                     <div class="flex justify-center mt-4 space-x-4">
-                        <button id="confirm-order-btn" onclick="verifyOrderWithDebounce(${currentOrderId}, true)" 
+                        ${Object.keys(extraItems).length === 0 ?
+                        `<button id="confirm-order-btn" onclick="verifyOrderWithDebounce(${currentOrderId}, true)" 
                             class="bg-green-500 text-white px-6 py-3 rounded-md hover:bg-green-600 mr-2 flex items-center justify-center shadow-md transition duration-200 ease-in-out transform hover:scale-105">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                             </svg>
                             สินค้าครบ
-                        </button>                        <button id="reject-order-btn" onclick="verifyOrderWithDebounce(${currentOrderId}, false)"
+                        </button>` :
+                        `<div class="bg-yellow-100 border border-yellow-400 text-yellow-700 p-3 rounded-md">
+                            <p class="font-bold flex items-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                พบสินค้าเกิน ไม่สามารถยืนยันได้
+                            </p>
+                        </div>`}
+                        <button id="reject-order-btn" onclick="verifyOrderWithDebounce(${currentOrderId}, false)"
                             class="bg-red-500 text-white px-6 py-3 rounded-md hover:bg-red-600 flex items-center justify-center shadow-md transition duration-200 ease-in-out transform hover:scale-105"
                             title="ส่งกลับไปให้พนักงานจัดเตรียมและคืนสต็อกสินค้า">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -455,15 +531,16 @@
                 verificationStatus.style.display = "block";
             } else if (Object.keys(detectedItems).length > 0) {
                 verificationStatus.innerHTML = `
-                    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 my-4 rounded-md shadow-sm">
+                    <div class="bg-red-100 border-l-4 border-red-400 text-red-700 p-4 my-4 rounded-md shadow-sm">
                         <div class="flex items-center">
-                            <svg class="w-6 h-6 mr-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <svg class="w-6 h-6 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                             </svg>
-                            <p class="font-bold">ตรวจพบสินค้าบางรายการ แต่ยังไม่ครบ</p>
+                            <p class="font-bold">ยังพบสินค้าไม่ครบตามออเดอร์!</p>
                         </div>
-                        <p class="ml-8 text-sm">กรุณาตรวจสอบสินค้าให้ครบตามรายการในออเดอร์</p>
+                        <p class="ml-8 text-sm">กรุณาตรวจสอบสินค้าในภาพให้ครบถ้วน</p>
                     </div>
+                    ${extraItemsHtml}
                     <div class="flex justify-center mt-4">                        <button id="reject-incomplete-btn" onclick="verifyOrderWithDebounce(${currentOrderId}, false)"
                             class="bg-yellow-500 text-white px-6 py-3 rounded-md hover:bg-yellow-600 flex items-center justify-center shadow-md transition duration-200 ease-in-out transform hover:scale-105"
                             title="ส่งกลับไปให้พนักงานจัดเตรียมและคืนสต็อกสินค้า">
@@ -554,7 +631,7 @@
             }
 
             // เปิดหน้าต่างใหม่สำหรับการตรวจจับแบบสตรีมโดยตรง
-            const directUrl = `http://localhost:8001/packing/realtime-detect-direct?camera_id=${currentCamera.id}&token=${token}`;
+            const directUrl = `http://192.168.0.44:8001/packing/realtime-detect-direct?camera_id=${currentCamera.id}&token=${token}`;
             window.open(directUrl, '_blank', 'width=680,height=520');
         }
 
@@ -563,7 +640,7 @@
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
             try {
-                const response = await fetch('http://localhost:8001/packing/cameras', {
+                const response = await fetch('http://192.168.0.44:8001/packing/cameras', {
                     // const response = await fetch('https://thesis-api.jintaphas.tech/packing/cameras', {
                     method: 'GET',
                     headers: {
@@ -638,18 +715,24 @@
                 } catch (e) {
                     console.error("❌ เกิดข้อผิดพลาดในการดึงรูปภาพที่ถ่าย:", e);
                 }
-            }
-
-            // ถ้ามีรูปภาพ ให้แนบไปกับคำขอ
+            }            // ถ้ามีรูปภาพ ให้แนบไปกับคำขอ
             if (imageBlob) {
                 formData.append("file", imageBlob, "verify_image.jpg");
             } else {
                 console.log("⚠️ ไม่มีรูปภาพสำหรับส่งไปยังเซิร์ฟเวอร์ จะใช้รูปภาพที่เซิร์ฟเวอร์ถ่ายเอง");
             }
 
+            // เพิ่ม camera_id ลงใน formData หากมีการเลือกกล้อง
+            if (currentCamera) {
+                formData.append("camera_id", currentCamera.id);
+                console.log(`✅ กำลังส่งข้อมูลกล้อง ID: ${currentCamera.id}`);
+            } else {
+                console.log("⚠️ ไม่มีการเลือกกล้อง");
+            }
+
             try {
                 console.log("🔄 กำลังส่งคำขอยืนยันออเดอร์...");
-                const response = await fetch(`http://localhost:8001/packing/orders/${orderId}/verify`, {
+                const response = await fetch(`http://192.168.0.44:8001/packing/orders/${orderId}/verify`, {
                     // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/verify`, {
                     method: "PUT",
                     headers: {
@@ -751,11 +834,11 @@
 
             currentOrderDiv.innerHTML = `
                 <div class="p-4 border rounded-md bg-gray-100 shadow-sm">
-                    <div class="mb-3 bg-white p-3 rounded-md shadow-sm">
-                        <p><strong>🆔 Order ID:</strong> <span class="ml-2 text-blue-600">${orderData.order_id}</span></p>
+                    <div class="mb-3 bg-white p-3 rounded-md shadow-sm">                        <p><strong>🆔 Order ID:</strong> <span class="ml-2 text-blue-600">${orderData.order_id}</span></p>
                         <p><strong>📧 ลูกค้า:</strong> <span class="ml-2 text-gray-700">${orderData.customer_email}</span></p>
                         <p><strong>💰 ราคารวม:</strong> <span class="ml-2 text-green-600 font-semibold">฿${orderData.total_price}</span></p>
                         <p><strong>📅 วันที่:</strong> <span class="ml-2 text-gray-700">${orderData.created_at}</span></p>
+                        ${orderData.camera_id ? `<p><strong>📷 กล้องที่ใช้ตรวจ:</strong> <span class="ml-2 text-purple-600">กล้อง #${orderData.camera_id}</span></p>` : ''}
                     </div>
                     <h4 class="text-lg font-bold mt-4 flex items-center">
                         <span class="mr-2">📦 รายการสินค้า</span>
@@ -824,14 +907,22 @@
                             style="width: 100%; max-height: 240px; object-fit: contain; border: 2px solid #3498db; border-radius: 8px;">
                         <div class="overlay-text">ภาพจับวัตถุ</div>
                     </div>
-                </div>
-
-                <!-- Controls -->
+                </div> <!-- Controls -->
                 <div class="flex justify-center space-x-4 mb-4">
                     <button id="start-camera" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
                         disabled>📸 เปิดกล้อง</button>
                     <button id="stop-camera" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">🛑
                         ปิดกล้อง</button>
+                    <button id="refresh-stream" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
+                        disabled>
+                        <svg class="w-5 h-5 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                            </path>
+                        </svg>
+                        รีเฟรชกล้อง
+                    </button>
                     <button id="capture"
                         class="bg-blue-500 text-white px-6 py-3 rounded-lg shadow hover:bg-blue-600 flex items-center hidden">
                         <span id="button-text">📸 ถ่ายภาพ</span>
@@ -889,14 +980,14 @@
 
     <canvas id="canvas"></canvas>
 
-    <script>
-        const canvas = document.getElementById('canvas');
+    <script>        const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const detectionList = document.getElementById('detection-list');
         const capturedImage = document.getElementById('captured-image');
 
         const startCameraBtn = document.getElementById('start-camera');
         const stopCameraBtn = document.getElementById('stop-camera');
+        const refreshStreamBtn = document.getElementById('refresh-stream');
         const captureBtn = document.getElementById('capture');
         const buttonText = document.getElementById("button-text");
         const spinner = document.getElementById("loading-spinner");
@@ -910,6 +1001,9 @@
 
         let currentCamera = null; // เก็บข้อมูลกล้องที่เลือก
         loadingSpinner.style.display = 'none'; // ซ่อน spinner เมื่อเริ่มโหลดหน้าเว็บ
+
+        // เพิ่ม Event Listener สำหรับปุ่มรีเฟรช
+        refreshStreamBtn.addEventListener('click', refreshDualStream);
 
         // เมื่อเลือกกล้องจาก dropdown ให้ update ข้อมูลกล้องที่เลือก
         cameraDropdown.addEventListener('change', (e) => {
@@ -927,7 +1021,7 @@
             const token = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
             try {
-                const response = await fetch('http://localhost:8001/packing/orders/packing', {
+                const response = await fetch('http://192.168.0.44:8001/packing/orders/packing', {
                     // const response = await fetch('https://thesis-api.jintaphas.tech/packing/orders/packing', {
                     method: 'GET',
                     headers: {
@@ -1001,7 +1095,7 @@
             }
 
             try {
-                const response = await fetch(`http://localhost:8001/packing/orders/${orderId}/assign`, {
+                const response = await fetch(`http://192.168.0.44:8001/packing/orders/${orderId}/assign`, {
                     // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/assign`, {
                     method: 'PUT',
                     headers: {
@@ -1028,6 +1122,46 @@
                 console.error("❌ Error claiming order:", error.message);
                 alert("เกิดข้อผิดพลาดในการรับงาน: " + error.message);
             }
+        }        // ฟังก์ชั่นสำหรับรีเฟรชการเชื่อมต่อ Dual Stream
+        async function refreshDualStream() {
+            try {
+                // แสดงสถานะกำลังทำงาน
+                document.getElementById('refresh-stream').disabled = true;
+
+                // ปิดการเชื่อมต่อ WebSocket เดิม
+                if (window.dualStreamWS) {
+                    window.dualStreamWS.close();
+                    window.dualStreamWS = null;
+                }
+
+                // ล้างภาพในหน้าจอ
+                document.getElementById('raw-stream').src = '';
+                document.getElementById('annotated-stream').src = '';
+                document.getElementById('dual-detection-list').innerHTML = '<div class="text-gray-500">กำลังเริ่มการเชื่อมต่อใหม่...</div>';
+
+                // แสดงสถานะในการรีเฟรช
+                const statusElem = document.getElementById('detect-status');
+                statusElem.textContent = 'กำลังรีเฟรชการเชื่อมต่อ...';
+                statusElem.className = 'detect-status loading';
+                statusElem.style.display = 'block';
+
+                // รอสักครู่
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // เริ่มการเชื่อมต่อ WebSocket ใหม่
+                setupDualStreamConnection();
+
+                // เปิดปุ่มรีเฟรชหลังจากเสร็จสิ้นการเชื่อมต่อใหม่
+                setTimeout(() => {
+                    document.getElementById('refresh-stream').disabled = false;
+                }, 2000);
+
+                console.log('✅ รีเฟรชการเชื่อมต่อแล้ว');
+            } catch (error) {
+                console.error('❌ เกิดข้อผิดพลาดในการรีเฟรช:', error.message);
+                alert('เกิดข้อผิดพลาดในการรีเฟรชกล้อง: ' + error.message);
+                document.getElementById('refresh-stream').disabled = false;
+            }
         }
 
         // เปิดกล้อง
@@ -1047,6 +1181,7 @@
                 // แสดงสถานะกำลังทำงาน
                 startCameraBtn.disabled = true;
                 stopCameraBtn.disabled = false;
+                document.getElementById('refresh-stream').disabled = false;
                 captureBtn.disabled = false;
 
                 // เปิดแสดงภาพแบบคู่โดยอัตโนมัติ (dual stream)
@@ -1062,9 +1197,7 @@
                 alert('เกิดข้อผิดพลาดในการเปิดกล้อง: ' + error.message);
                 startCameraBtn.disabled = false;
             }
-        });
-
-        // ปิดกล้อง
+        });        // ปิดกล้อง
         stopCameraBtn.addEventListener('click', async () => {
             try {
                 const token = document.cookie.split('; ')
@@ -1088,6 +1221,7 @@
                 // เปลี่ยนสถานะปุ่ม
                 startCameraBtn.disabled = false;
                 stopCameraBtn.disabled = true;
+                document.getElementById('refresh-stream').disabled = true;
                 captureBtn.disabled = true;
 
                 // แสดงสถานะว่าหยุดการตรวจจับแล้ว
@@ -1117,7 +1251,7 @@
                 if (!currentCamera) throw new Error('❌ No Camera Selected');
 
                 // ✅ ใช้ camera_id ส่งไปที่ backend
-                const response = await fetch(`http://localhost:8001/packing/snapshot?camera_id=${currentCamera.id}`, {
+                const response = await fetch(`http://192.168.0.44:8001/packing/snapshot?camera_id=${currentCamera.id}`, {
                     // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/snapshot?camera_id=${currentCamera.id}`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -1134,7 +1268,7 @@
 
                 // console.log('📸 Sending captured image to backend...');
 
-                const detectResponse = await fetch('http://localhost:8001/packing/detect', {
+                const detectResponse = await fetch('http://192.168.0.44:8001/packing/detect', {
                     // const detectResponse = await fetch('https://thesis-api.jintaphas.tech/packing/detect', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token}` },
