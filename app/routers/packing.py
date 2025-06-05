@@ -444,10 +444,14 @@ async def realtime_detect(
                         
                         # แปลงภาพที่มีการวาดกรอบแล้วเป็น base64
                         _, buffer = cv2.imencode('.jpg', frame)
-                        yield (
-                            b'--frame\r\n'
-                            b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
-                        )
+                        img_base64 = base64.b64encode(buffer).decode('utf-8')
+                        
+                        # ส่งผลลัพธ์กลับไปยัง client
+                        await websocket.send_json({
+                            "image": img_base64,
+                            "detections": detections,
+                            "count": len(detections)
+                        })
                         
                     except Exception as e:
                         print(f"❌ Error in detection: {str(e)}")
@@ -1029,16 +1033,15 @@ def assign_order(
     
     order.updated_at = datetime.utcnow()  # บันทึกเวลาที่ทำการ assign
     db.commit()
-    db.refresh(order)
-
-    # Format the order items properly
+    db.refresh(order)    # Format the order items properly
     formatted_items = [
         {
             "product_id": item.product_id,
             "product_name": item.product.name if item.product else "Unknown",
             "quantity": item.quantity,
             "price": item.price_at_order,
-            "total": item.total_item_price
+            "total": item.total_item_price,
+            "image_path": item.product.image_path if item.product else None
         }
         for item in order.order_items
     ]
@@ -1052,6 +1055,40 @@ def assign_order(
     }
 
     return JSONResponse(content=order_data)
+
+# ✅ ยกเลิกการรับงาน (Cancel Order Assignment)
+@router.put("/orders/{order_id}/cancel-assignment", response_class=JSONResponse)
+def cancel_order_assignment(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4)),
+):
+    """
+    ยกเลิกการรับออเดอร์ - ตั้งค่า assigned_to เป็น null เพื่อให้พนักงานคนอื่นสามารถรับงานได้
+    """
+    order = db.query(Order).filter(
+        and_(
+            Order.order_id == order_id,
+            Order.assigned_to == current_user.id,
+            Order.status.in_(["verifying", "packing"])
+        )
+    ).first()
+    
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found or not assigned to you")
+
+    # ตั้งค่า assigned_to เป็น null และเปลี่ยนสถานะกลับเป็น packing
+    order.assigned_to = None
+    order.status = "packing"
+    order.updated_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return JSONResponse(content={
+        "message": f"✅ ยกเลิกการรับออเดอร์ {order_id} สำเร็จ",
+        "order_id": order_id,
+        "status": "packing"
+    })
 
 @router.post("/orders/{order_id}/upload-image", response_class=JSONResponse)
 async def upload_packed_image(
@@ -1527,19 +1564,13 @@ async def websocket_camera_detect(websocket: WebSocket, camera_id: int = Query(.
                 # รอสักครู่เพื่อไม่ให้ใช้ CPU มากเกินไป
                 await asyncio.sleep(0.01)
                 
-        except WebSocketDisconnect:
-            print(f"⚠️ WebSocket client disconnected for camera {camera_id}")
-        finally:
-            # ไม่ปิดกล้องเมื่อ client disconnect เพราะอาจมีคนอื่นกำลังใช้อยู่
-            detection_flags[camera_id] = False
-    
-    except Exception as e:
-        print(f"❌ WebSocket camera detection error: {str(e)}")
-        traceback.print_exc()
-        try:
-            await websocket.send_json({"error": f"Server error: {str(e)}"})
-        except:
-            pass
+        except Exception as e:
+            print(f"❌ WebSocket camera detection error: {str(e)}")
+            traceback.print_exc()
+            try:
+                await websocket.send_json({"error": f"Server error: {str(e)}"})
+            except:
+                pass
     finally:
         # ปิดการเชื่อมต่อ WebSocket
         try:

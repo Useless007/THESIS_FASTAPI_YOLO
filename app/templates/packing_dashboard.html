@@ -19,6 +19,8 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             overflow: hidden;
             margin-bottom: 15px;
+            width: 100%;
+            max-width: 640px;
         }
 
         /* สไตล์สำหรับภาพ stream */
@@ -28,6 +30,175 @@
             width: 640px;
             height: 480px;
             display: block;
+        }
+
+        /* Responsive CSS สำหรับหน้าจอขนาดต่างๆ */
+        @media (max-width: 1280px) {
+
+            /* สำหรับหน้าจอที่เล็กกว่า 1280px */
+            .video-container {
+                width: 100% !important;
+                max-width: 600px;
+            }
+
+            #camera-stream {
+                width: 100% !important;
+                max-width: 600px !important;
+                height: auto !important;
+            }
+
+            #detection-canvas {
+                width: 100% !important;
+                max-width: 600px !important;
+                height: auto !important;
+            }
+        }
+
+        @media (max-width: 1024px) {
+
+            /* สำหรับหน้าจอที่เล็กกว่า 1024px - เปลี่ยนจาก 2 คอลัมน์เป็น 1 คอลัมน์ */
+            .main-grid {
+                grid-template-columns: 1fr !important;
+                gap: 1.5rem !important;
+            }
+
+            .video-container {
+                width: 100% !important;
+                max-width: 500px;
+                margin: 0 auto;
+            }
+
+            #camera-stream {
+                width: 100% !important;
+                max-width: 500px !important;
+                height: auto !important;
+            }
+
+            #detection-canvas {
+                width: 100% !important;
+                max-width: 500px !important;
+                height: auto !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+
+            /* สำหรับ tablet และ mobile */
+            main {
+                padding: 1rem !important;
+            }
+
+            .main-grid {
+                gap: 1rem !important;
+            }
+
+            .video-container {
+                width: 100% !important;
+                max-width: 100%;
+                margin: 0;
+            }
+
+            #camera-stream {
+                width: 100% !important;
+                height: auto !important;
+            }
+
+            #detection-canvas {
+                width: 100% !important;
+                height: auto !important;
+            }
+
+            /* ปรับขนาดปุ่มและ controls */
+            .camera-controls button {
+                padding: 0.5rem 1rem;
+                font-size: 0.875rem;
+            }
+
+            .space-x-4>*+* {
+                margin-left: 0.5rem !important;
+            }
+        }
+
+        @media (max-width: 640px) {
+
+            /* สำหรับ mobile เล็ก */
+            .camera-controls {
+                flex-direction: column !important;
+                gap: 0.5rem !important;
+            }
+
+            .space-x-4 {
+                flex-direction: column !important;
+            }
+
+            .space-x-4>*+* {
+                margin-left: 0 !important;
+                margin-top: 0.5rem !important;
+            }
+
+            h1 {
+                font-size: 1rem !important;
+            }
+
+            h2 {
+                font-size: 1.25rem !important;
+            }
+
+            h3 {
+                font-size: 1.125rem !important;
+            }
+
+            /* Responsive table */
+            table {
+                font-size: 0.75rem !important;
+            }
+
+            table th,
+            table td {
+                padding: 0.25rem !important;
+            }
+
+            /* Stack table cells on very small screens */
+            @media (max-width: 480px) {
+
+                table,
+                thead,
+                tbody,
+                th,
+                td,
+                tr {
+                    display: block;
+                }
+
+                thead tr {
+                    position: absolute;
+                    top: -9999px;
+                    left: -9999px;
+                }
+
+                tr {
+                    border: 1px solid #ccc;
+                    margin-bottom: 10px;
+                    padding: 10px;
+                    border-radius: 5px;
+                }
+
+                td {
+                    border: none;
+                    position: relative;
+                    padding-left: 50% !important;
+                    text-align: left !important;
+                }
+
+                td:before {
+                    content: attr(data-label) ": ";
+                    position: absolute;
+                    left: 6px;
+                    width: 45%;
+                    white-space: nowrap;
+                    font-weight: bold;
+                }
+            }
         }
 
         /* สไตล์ spinner */
@@ -267,8 +438,32 @@
             startDetectionBtn.disabled = true;
             stopDetectionBtn.disabled = true;
             refreshStreamBtn.disabled = true;
-        });        // ...existing code...// ✅ ฟังก์ชันตรวจสอบว่าสินค้าที่ตรวจจับได้ตรงกับรายการในออเดอร์ปัจจุบันหรือไม่
+        });
+
+        // ✅ Event listener สำหรับการปรับขนาดหน้าต่าง
+        window.addEventListener('resize', () => {
+            // หน่วงเวลาเล็กน้อยเพื่อให้การปรับขนาดเสร็จสิ้น
+            setTimeout(() => {
+                const detectionCanvas = document.getElementById('detection-canvas');
+                const cameraStreamImg = document.getElementById('camera-stream');
+
+                if (detectionCanvas && cameraStreamImg && cameraStreamImg.offsetWidth > 0) {
+                    // ปรับขนาด canvas ใหม่ตามขนาดที่แสดงปัจจุบัน
+                    const displayedWidth = cameraStreamImg.offsetWidth;
+                    const displayedHeight = cameraStreamImg.offsetHeight;
+
+                    detectionCanvas.width = displayedWidth;
+                    detectionCanvas.height = displayedHeight;
+                    detectionCanvas.style.width = displayedWidth + 'px';
+                    detectionCanvas.style.height = displayedHeight + 'px';
+
+                    console.log(`📱 Canvas resized to: ${displayedWidth}x${displayedHeight}`);
+                }
+            }, 100);
+        });// ...existing code...        // ✅ ฟังก์ชันตรวจสอบว่าสินค้าที่ตรวจจับได้ตรงกับรายการในออเดอร์ปัจจุบันหรือไม่
         function checkOrderItemsMatch(detectedItems) {
+            console.log('🔍 checkOrderItemsMatch called with:', detectedItems);
+
             // อ่านข้อมูลออเดอร์ปัจจุบันจาก localStorage
             const currentOrderId = localStorage.getItem("currentOrderId");
             if (!currentOrderId) {
@@ -452,6 +647,8 @@
                 `;
                 verificationStatus.style.display = "block";
             } else {
+                // ชัดเจนในการซ่อน verification status และล้างเนื้อหา
+                verificationStatus.innerHTML = '';
                 verificationStatus.style.display = "none";
             }
         }
@@ -674,10 +871,76 @@
                 // ล้างตัวจับเวลา
                 verifyOrderDebounceTimer = null;
             }, 1500); // รอ 1.5 วินาทีก่อนที่จะทำงานจริง
+        }        // ✅ Helper function to wait for image loading with promise
+        function waitForImageLoad(img) {
+            return new Promise((resolve, reject) => {
+                if (img.complete && img.naturalHeight !== 0) {
+                    resolve(img);
+                    return;
+                }
+
+                img.onload = () => {
+                    console.log(`✅ Image loaded successfully: ${img.src}`);
+                    resolve(img);
+                };
+
+                img.onerror = () => {
+                    console.warn(`⚠️ Image failed to load: ${img.src}`);
+                    reject(new Error(`Failed to load image: ${img.src}`));
+                };
+            });
+        }
+        // ✅ Helper function to wait for image loading completion
+        function waitForImageLoad(img) {
+            return new Promise((resolve, reject) => {
+                if (img.complete && img.naturalHeight !== 0) {
+                    resolve(img);
+                } else {
+                    img.onload = () => resolve(img);
+                    img.onerror = () => reject(new Error(`Failed to load image: ${img.src}`));
+                }
+            });
         }
 
-        // ✅ ฟังก์ชันแสดงข้อมูลออเดอร์ที่กำลังแพ็ค
-        function displayOrderDetails(orderData) {
+        // ✅ Helper function to create image element with proper error handling and fallback
+        async function createImageElement(imagePath, altText) {
+            return new Promise(async (resolve) => {
+                console.log(`🖼️ Attempting to load image: ${imagePath}`);
+
+                const img = document.createElement('img');
+                img.alt = altText;
+                img.loading = 'eager';
+                img.className = 'w-full h-full object-contain border rounded-md shadow-sm';
+
+                // Set timeout for loading
+                const timeout = setTimeout(() => {
+                    console.warn(`⏰ Image loading timeout: ${imagePath}`);
+                    const fallback = document.createElement('div');
+                    fallback.className = 'w-full h-full bg-gray-200 flex items-center justify-center rounded-md text-xs text-gray-500 border';
+                    fallback.textContent = 'ไม่มีรูป';
+                    resolve(fallback);
+                }, 5000); // 5 second timeout
+
+                img.onload = () => {
+                    clearTimeout(timeout);
+                    console.log(`✅ Image loaded successfully: ${imagePath}`);
+                    resolve(img);
+                };
+
+                img.onerror = () => {
+                    clearTimeout(timeout);
+                    console.warn(`❌ Image failed to load: ${imagePath}`);
+                    const fallback = document.createElement('div');
+                    fallback.className = 'w-full h-full bg-gray-200 flex items-center justify-center rounded-md text-xs text-gray-500 border';
+                    fallback.textContent = 'ไม่มีรูป';
+                    resolve(fallback);
+                };
+
+                // Start loading the image
+                img.src = imagePath;
+            });
+        }        // ✅ ฟังก์ชันแสดงข้อมูลออเดอร์ที่กำลังแพ็ค - Enhanced image loading with proper async handling
+        async function displayOrderDetails(orderData) {
             const currentOrderDiv = document.getElementById('current-order');
 
             if (!orderData) {
@@ -685,48 +948,112 @@
                 return;
             }
 
-            let itemsHtml = "";
-            orderData.items.forEach(item => {
-                itemsHtml += `
-                    <li class="border-b py-2 flex items-center">
-                        <div class="w-16 h-16 mr-3 flex-shrink-0">
-                            ${item.image_path ?
-                        `<img src="${item.image_path}" alt="${item.product_name}" class="w-full h-full object-contain border rounded-md shadow-sm">` :
-                        '<div class="w-full h-full bg-gray-200 flex items-center justify-center rounded-md">ไม่มีรูป</div>'}
-                        </div>
-                        <div class="flex-grow">
-                            <strong>${item.product_name}</strong> - ${item.quantity} ชิ้น
-                        </div>
-                    </li>
-                `;
-            });
+            console.log(`🏗️ Building order display for Order ID: ${orderData.order_id}`);
 
-            currentOrderDiv.innerHTML = `
-                <div class="p-4 border rounded-md bg-gray-100 shadow-sm">
-                    <div class="mb-3 bg-white p-3 rounded-md shadow-sm">                        <p><strong>🆔 Order ID:</strong> <span class="ml-2 text-blue-600">${orderData.order_id}</span></p>
-                        <p><strong>📧 ลูกค้า:</strong> <span class="ml-2 text-gray-700">${orderData.customer_email}</span></p>
-                        <p><strong>💰 ราคารวม:</strong> <span class="ml-2 text-green-600 font-semibold">฿${orderData.total_price}</span></p>
-                        <p><strong>📅 วันที่:</strong> <span class="ml-2 text-gray-700">${orderData.created_at}</span></p>
-                        ${orderData.camera_id ? `<p><strong>📷 กล้องที่ใช้ตรวจ:</strong> <span class="ml-2 text-purple-600">กล้อง #${orderData.camera_id}</span></p>` : ''}
-                    </div>
-                    <h4 class="text-lg font-bold mt-4 flex items-center">
-                        <span class="mr-2">📦 รายการสินค้า</span>
-                        <span class="text-sm font-normal text-gray-500">(กรุณาเตรียมสินค้าตามรายการ)</span>
-                    </h4>
-                    <ul class="mt-2 bg-white rounded-md shadow-sm p-2 divide-y divide-gray-100">${itemsHtml}</ul>
-                    
-                    <!-- ซ่อนปุ่มที่ซ้ำซ้อนในส่วนนี้ -->
-                    <!-- <br>
-                    <button class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
-                        onclick="verifyOrder(${orderData.order_id}, true)">✅ สินค้าครบ</button>
-                    <button class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
-                        onclick="verifyOrder(${orderData.order_id}, false)">❌ สินค้ายังไม่ครบ</button> -->
-                </div>
+            // Clear existing content
+            currentOrderDiv.innerHTML = '';
+
+            // Create main container
+            const mainContainer = document.createElement('div');
+            mainContainer.className = 'p-4 border rounded-md bg-gray-100 shadow-sm';
+
+            // Create order info section
+            const orderInfoDiv = document.createElement('div');
+            orderInfoDiv.className = 'mb-3 bg-white p-3 rounded-md shadow-sm';
+            orderInfoDiv.innerHTML = `
+                <p><strong>🆔 Order ID:</strong> <span class="ml-2 text-blue-600">${orderData.order_id}</span></p>
+                <p><strong>📧 ลูกค้า:</strong> <span class="ml-2 text-gray-700">${orderData.customer_email}</span></p>
+                <p><strong>💰 ราคารวม:</strong> <span class="ml-2 text-green-600 font-semibold">฿${orderData.total_price}</span></p>
+                <p><strong>📅 วันที่:</strong> <span class="ml-2 text-gray-700">${orderData.created_at}</span></p>
+                ${orderData.camera_id ? `<p><strong>📷 กล้องที่ใช้ตรวจ:</strong> <span class="ml-2 text-purple-600">กล้อง #${orderData.camera_id}</span></p>` : ''}
             `;
+
+            // Create header section
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'flex flex-col sm:flex-row sm:items-center sm:justify-between mt-4 mb-2';
+
+            const titleDiv = document.createElement('h4');
+            titleDiv.className = 'text-lg font-bold flex items-center';
+            titleDiv.innerHTML = `
+                <span class="mr-2">📦 รายการสินค้า</span>
+                <span class="text-sm font-normal text-gray-500">(กรุณาเตรียมสินค้าตามรายการ)</span>
+            `;
+
+            const cancelButton = document.createElement('button');
+            cancelButton.className = 'mt-2 sm:mt-0 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 flex items-center justify-center shadow-md transition duration-200 ease-in-out transform hover:scale-105';
+            cancelButton.title = 'ยกเลิกการรับออเดอร์นี้เพื่อให้พนักงานคนอื่นสามารถรับได้';
+            cancelButton.onclick = () => cancelOrderAssignment(orderData.order_id);
+            cancelButton.innerHTML = `
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+                ยกเลิกรับออเดอร์
+            `;
+
+            headerDiv.appendChild(titleDiv);
+            headerDiv.appendChild(cancelButton);
+
+            // Create items list
+            const itemsList = document.createElement('ul');
+            itemsList.className = 'mt-2 bg-white rounded-md shadow-sm p-2 divide-y divide-gray-100';
+
+            // Process each item with proper DOM creation and async image handling
+            console.log(`📦 Processing ${orderData.items.length} items...`);
+
+            for (const item of orderData.items) {
+                const listItem = document.createElement('li');
+                listItem.className = 'border-b py-2 flex items-center';
+
+                // Create image container
+                const imageContainer = document.createElement('div');
+                imageContainer.className = 'w-16 h-16 mr-3 flex-shrink-0';
+
+                console.log(`🖼️ Processing image for ${item.product_name}:`, item.image_path);
+
+                if (item.image_path && item.image_path.trim() !== '') {
+                    try {
+                        // Use the enhanced createImageElement function with proper async handling
+                        const imageElement = await createImageElement(item.image_path, item.product_name);
+                        imageContainer.appendChild(imageElement);
+                        console.log(`✅ Successfully added image for ${item.product_name}`);
+                    } catch (error) {
+                        console.error(`❌ Error loading image for ${item.product_name}:`, error);
+                        // Create fallback element in case of error
+                        const placeholderElement = document.createElement('div');
+                        placeholderElement.className = 'w-full h-full bg-gray-200 flex items-center justify-center rounded-md text-xs text-gray-500 border';
+                        placeholderElement.textContent = 'ไม่มีรูป';
+                        imageContainer.appendChild(placeholderElement);
+                    }
+                } else {
+                    // No image path - show placeholder
+                    console.log(`ℹ️ No image path for ${item.product_name}, showing placeholder`);
+                    const placeholderElement = document.createElement('div');
+                    placeholderElement.className = 'w-full h-full bg-gray-200 flex items-center justify-center rounded-md text-xs text-gray-500 border';
+                    placeholderElement.textContent = 'ไม่มีรูป';
+                    imageContainer.appendChild(placeholderElement);
+                }
+
+                // Create text content
+                const textContainer = document.createElement('div');
+                textContainer.className = 'flex-grow';
+                textContainer.innerHTML = `<strong>${item.product_name}</strong> - ${item.quantity} ชิ้น`;
+
+                listItem.appendChild(imageContainer);
+                listItem.appendChild(textContainer);
+                itemsList.appendChild(listItem);
+            }
+
+            // Assemble the complete structure
+            mainContainer.appendChild(orderInfoDiv);
+            mainContainer.appendChild(headerDiv);
+            mainContainer.appendChild(itemsList);
+            currentOrderDiv.appendChild(mainContainer);
 
             // บันทึก orderId ลงใน localStorage สำหรับใช้ในฟังก์ชัน checkOrderItemsMatch
             localStorage.setItem("currentOrderId", orderData.order_id);
-        }        // ✅ ฟังก์ชันเริ่มการตรวจจับวัตถุ
+
+            console.log(`✅ Successfully displayed order ${orderData.order_id} with ${orderData.items.length} items and proper image loading`);
+        }// ✅ ฟังก์ชันเริ่มการตรวจจับวัตถุ
         async function startDetection() {
             try {
                 const rawToken = document.cookie.split('; ')
@@ -863,18 +1190,40 @@
 
             // แสดงรายการวัตถุที่ตรวจพบ
             const detectionList = document.getElementById('detection-list');
-            detectionList.innerHTML = '';
-
-            if (!result.detections || result.detections.length === 0) {
+            detectionList.innerHTML = ''; if (!result.detections || result.detections.length === 0) {
                 detectionList.innerHTML = '<div class="text-gray-500">ไม่พบวัตถุใดในภาพ</div>';
                 // ล้าง canvas เมื่อไม่มีการตรวจจับและ return
                 canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
+                // ซ่อน verification status เมื่อไม่มีการตรวจจับ
+                const verificationStatus = document.getElementById('verification-status');
+                verificationStatus.innerHTML = '';
+                verificationStatus.style.display = 'none';
+
+                // เรียก checkOrderItemsMatch ด้วย object ว่างเพื่อให้แน่ใจว่า verification status ถูกซ่อน
+                checkOrderItemsMatch({});
+                return;
+            }// ดึงค่า confidence threshold จาก UI slider
+            const confidenceThreshold = parseFloat(document.getElementById('confidence-threshold').value);
+
+            // กรองเฉพาะวัตถุที่มี confidence มากกว่าค่าที่กำหนด
+            const filteredDetections = result.detections.filter(detection => detection.confidence > confidenceThreshold);
+
+            console.log(`📊 Detection Results stats: Total: ${result.detections.length}, High confidence (>${confidenceThreshold}): ${filteredDetections.length}`);            // ตรวจสอบว่ามีวัตถุที่ผ่านเกณฑ์ confidence หรือไม่
+            if (filteredDetections.length === 0) {
+                detectionList.innerHTML = `<div class="detection-item text-gray-500">ไม่พบวัตถุที่มีความเชื่อมั่น > ${(confidenceThreshold * 100).toFixed(0)}%</div>`;
+                // ซ่อน verification status เมื่อไม่มีวัตถุที่ผ่านเกณฑ์ confidence
+                const verificationStatus = document.getElementById('verification-status');
+                verificationStatus.innerHTML = '';
+                verificationStatus.style.display = 'none';
+
+                // เรียก checkOrderItemsMatch ด้วย object ว่างเพื่อให้แน่ใจว่า verification status ถูกซ่อน
+                checkOrderItemsMatch({});
                 return;
             }
 
-            // นับจำนวนวัตถุแต่ละประเภท
+            // นับจำนวนวัตถุแต่ละประเภทจากวัตถุที่ผ่านการกรอง
             const counts = {};
-            result.detections.forEach(detection => {
+            filteredDetections.forEach(detection => {
                 const label = detection.label;
                 counts[label] = (counts[label] || 0) + 1;
             });
@@ -896,10 +1245,10 @@
                 detectionList.appendChild(item);
             }
 
-            // วาดกรอบบน canvas
-            drawDetectionBoxes(result.detections, result.in_order_items || []);
+            // วาดกรอบบน canvas (ใช้ข้อมูลที่ผ่านการกรองแล้ว)
+            drawDetectionBoxes(filteredDetections, result.in_order_items || []);
 
-            // ตรวจสอบการจับคู่กับออเดอร์
+            // ตรวจสอบการจับคู่กับออเดอร์ (ใช้ counts ที่มาจากข้อมูลที่ผ่านการกรองแล้ว)
             checkOrderItemsMatch(counts);
         }        // ✅ ฟังก์ชันวาดกรอบการตรวจจับ
         function drawDetectionBoxes(detections, inOrderItems) {
@@ -907,15 +1256,32 @@
             const detectionCanvas = document.getElementById('detection-canvas');
             const canvasCtx = detectionCanvas.getContext('2d');
 
+            // ปรับขนาด canvas ให้ตรงกับขนาดของภาพที่แสดงจริง
+            const displayedWidth = cameraStreamImg.offsetWidth;
+            const displayedHeight = cameraStreamImg.offsetHeight;
+
+            // อัพเดทขนาด canvas ให้ตรงกับขนาดที่แสดงบนหน้าจอ
+            detectionCanvas.width = displayedWidth;
+            detectionCanvas.height = displayedHeight;
+
+            // ปรับ style ของ canvas ให้ตรงกับขนาดที่แสดง
+            detectionCanvas.style.width = displayedWidth + 'px';
+            detectionCanvas.style.height = displayedHeight + 'px';
+
             const imgWidth = cameraStreamImg.naturalWidth || 640;
             const imgHeight = cameraStreamImg.naturalHeight || 480;
 
-            // คำนวณสัดส่วนการปรับขนาด
-            const scaleX = detectionCanvas.width / imgWidth;
-            const scaleY = detectionCanvas.height / imgHeight; detections.forEach(detection => {
+            // คำนวณสัดส่วนการปรับขนาดจากขนาดภาพจริงมาเป็นขนาดที่แสดง
+            const scaleX = displayedWidth / imgWidth;
+            const scaleY = displayedHeight / imgHeight;
+
+            // ข้อมูลที่ส่งเข้ามาผ่านการกรองด้วย confidence threshold แล้ว
+            console.log(`📊 Drawing ${detections.length} filtered detections on canvas (${displayedWidth}x${displayedHeight})`);
+
+            detections.forEach(detection => {
                 const [x1, y1, x2, y2] = detection.box;
 
-                // ปรับขนาดพิกัดตามสัดส่วน canvas
+                // ปรับขนาดพิกัดตามสัดส่วน canvas ที่แสดงจริง
                 const scaledX1 = x1 * scaleX;
                 const scaledY1 = y1 * scaleY;
                 const scaledX2 = x2 * scaleX;
@@ -941,8 +1307,7 @@
                 canvasCtx.fillRect(scaledX1, scaledY1 - textHeight, textMetrics.width + 10, textHeight);
 
                 // วาดข้อความ
-                canvasCtx.fillStyle = '#000000';
-                canvasCtx.fillText(label, scaledX1 + 5, scaledY1 - 5);
+                canvasCtx.fillStyle = '#000000'; canvasCtx.fillText(label, scaledX1 + 5, scaledY1 - 5);
             });
         }
     </script>
@@ -950,36 +1315,37 @@
 
 <body class="bg-gray-100">
     <nav class="bg-white shadow-md p-4">
-        <div class="max-w-screen-xl mx-auto flex justify-between items-center">
-            <h1 class="text-xl font-bold">📷 Packing Staff Camera Dashboard (YOLOv10)</h1>
-            <a href="/" class="text-blue-500 hover:underline">กลับสู่หน้าแรก</a>
+        <div class="max-w-screen-xl mx-auto flex flex-col sm:flex-row justify-between items-center">
+            <h1 class="text-lg lg:text-xl font-bold mb-2 sm:mb-0">📷 Packing Staff Camera Dashboard (YOLOv10)</h1>
+            <a href="/" class="text-blue-500 hover:underline text-sm lg:text-base">กลับสู่หน้าแรก</a>
         </div>
     </nav>
-
-    <main class="p-8">
-        <div class="grid grid-cols-2 gap-8">
+    <main class="p-4 lg:p-8">
+        <div class="main-grid grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-8">
             <!-- Left Column - Camera and Detection -->
-            <div class="space-y-6">
-                <!-- Dropdown สำหรับเลือกกล้อง (แสดงโต๊ะที่ใช้งาน) -->
+            <div class="space-y-6"> <!-- Dropdown สำหรับเลือกกล้อง (แสดงโต๊ะที่ใช้งาน) -->
                 <div class="mb-4 text-center">
-                    <label for="camera-dropdown" class="block mb-2 text-lg font-semibold">เลือกกล้อง (โต๊ะ):</label>
-                    <select id="camera-dropdown" class="border border-gray-300 rounded-md p-2">
+                    <label for="camera-dropdown" class="block mb-2 text-base lg:text-lg font-semibold">เลือกกล้อง
+                        (โต๊ะ):</label>
+                    <select id="camera-dropdown" class="border border-gray-300 rounded-md p-2 w-full max-w-xs">
                         <!-- ตัวเลือกจะถูก populate โดย JavaScript -->
                     </select>
                 </div>
 
-                <h2 class="text-2xl font-bold mb-6">🔍 ตรวจจับสินค้าในภาพด้วย YOLOv10 ผ่านกล้อง</h2>
+                <h2 class="text-xl lg:text-2xl font-bold mb-4 lg:mb-6 text-center lg:text-left">🔍
+                    ตรวจจับสินค้าในภาพด้วย YOLOv10 ผ่านกล้อง</h2>
 
                 <!-- Control panel สำหรับการตรวจจับ -->
                 <div id="detect-status" class="detect-status" style="display: none;">
                     ยังไม่ได้เริ่มการตรวจจับ
                 </div> <!-- Camera Stream Container -->
-                <div id="camera-stream-container" style="display: none;">
-                    <div class="video-container" style="position: relative; width: 640px; margin: 0 auto;">
+                <div id="camera-stream-container" class="text-center" style="display: none;">
+                    <div class="video-container"
+                        style="position: relative; width: 100%; max-width: 640px; margin: 0 auto;">
                         <img id="camera-stream"
-                            style="width: 640px; height: 480px; object-fit: contain; border: 2px solid #3498db; border-radius: 8px; display: block;">
+                            style="width: 100%; max-width: 640px; height: auto; object-fit: contain; border: 2px solid #3498db; border-radius: 8px; display: block;">
                         <canvas id="detection-canvas" width="640" height="480"
-                            style="position: absolute; top: 0; left: 0; pointer-events: none; border-radius: 8px;"></canvas>
+                            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; border-radius: 8px;"></canvas>
                         <div class="overlay-text">Camera Stream</div>
 
                         <!-- Loading Spinner for camera -->
@@ -991,19 +1357,33 @@
                         </div>
                     </div>
                 </div>
-                <div class="flex justify-center space-x-4 mb-4">
-                    <button id="start-camera" class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+                <div class="flex flex-wrap justify-center space-x-2 lg:space-x-4 mb-4">
+                    <!-- Confidence Threshold Control -->
+                    <div class="flex items-center space-x-2 bg-gray-200 px-2 py-1 lg:px-3 lg:py-2 rounded-md">
+                        <label for="confidence-threshold" class="text-xs lg:text-sm font-medium">🎯 Confidence:</label>
+                        <input type="range" id="confidence-threshold" min="0.1" max="1.0" step="0.05" value="0.7"
+                            class="w-16 lg:w-20 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
+                        <span id="confidence-value" class="text-xs lg:text-sm font-bold">0.7</span>
+                    </div>
+                </div>
+                <div class="camera-controls flex flex-wrap justify-center space-x-2 lg:space-x-4 mb-4">
+                    <button id="start-camera"
+                        class="bg-green-500 text-white px-3 py-2 lg:px-4 lg:py-2 rounded-md hover:bg-green-600 text-sm lg:text-base"
                         disabled>📸 เปิดกล้อง</button>
-                    <button id="stop-camera" class="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600"
+                    <button id="stop-camera"
+                        class="bg-red-500 text-white px-3 py-2 lg:px-4 lg:py-2 rounded-md hover:bg-red-600 text-sm lg:text-base"
                         disabled>🛑
                         ปิดกล้อง</button>
                     <button id="start-detection"
-                        class="bg-purple-500 text-white px-4 py-2 rounded-md hover:bg-purple-600" disabled>🔍
+                        class="bg-purple-500 text-white px-3 py-2 lg:px-4 lg:py-2 rounded-md hover:bg-purple-600 text-sm lg:text-base"
+                        disabled>🔍
                         เริ่มตรวจจับ</button>
                     <button id="stop-detection"
-                        class="bg-orange-500 text-white px-4 py-2 rounded-md hover:bg-orange-600" disabled>⏹️
+                        class="bg-orange-500 text-white px-3 py-2 lg:px-4 lg:py-2 rounded-md hover:bg-orange-600 text-sm lg:text-base"
+                        disabled>⏹️
                         หยุดตรวจจับ</button>
-                    <button id="refresh-stream" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
+                    <button id="refresh-stream"
+                        class="bg-blue-500 text-white px-3 py-2 lg:px-4 lg:py-2 rounded-md hover:bg-blue-600 text-sm lg:text-base"
                         disabled>
                         <svg class="w-5 h-5 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                             xmlns="http://www.w3.org/2000/svg">
@@ -1019,19 +1399,17 @@
                 <div id="camera-controls" class="mb-4">
                     <!-- ปุ่มจะถูกเพิ่มโดย JavaScript -->
                 </div>
-            </div>
-
-            <!-- Right Column - Order Details -->
-            <div class="space-y-6">
+            </div> <!-- Right Column - Order Details -->
+            <div class="space-y-4 lg:space-y-6">
                 <section>
-                    <h3 class="text-2xl font-bold mb-4">📦 รายละเอียดออเดอร์ที่กำลังบรรจุ</h3>
-                    <div id="current-order" class="bg-white shadow-md p-4 rounded-md">
+                    <h3 class="text-xl lg:text-2xl font-bold mb-3 lg:mb-4">📦 รายละเอียดออเดอร์ที่กำลังบรรจุ</h3>
+                    <div id="current-order" class="bg-white shadow-md p-3 lg:p-4 rounded-md">
                         <p class="text-gray-500">ยังไม่มีออเดอร์ที่รับ</p>
                     </div>
                 </section> <!-- Detection Results -->
                 <div id="detection-results"
                     style="display: none; margin-top: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
-                    <h3>ผลการตรวจจับวัตถุ</h3>
+                    <h3 class="text-lg lg:text-xl font-bold mb-2">ผลการตรวจจับวัตถุ</h3>
                     <div id="detection-list"></div>
                 </div>
 
@@ -1039,11 +1417,10 @@
                 <div id="verification-status" style="display: none;"></div>
             </div>
         </div>
-
         <!-- Bottom Section - Packing Orders List -->
-        <section class="mt-8 text-center">
-            <h3 class="text-2xl font-bold mb-4">📦 รายการคำสั่งซื้อที่กำลัง Packing</h3>
-            <div id="packing-orders-list" class="bg-white shadow-md p-4 rounded-md">
+        <section class="mt-6 lg:mt-8 text-center">
+            <h3 class="text-xl lg:text-2xl font-bold mb-3 lg:mb-4">📦 รายการคำสั่งซื้อที่กำลัง Packing</h3>
+            <div id="packing-orders-list" class="bg-white shadow-md p-3 lg:p-4 rounded-md overflow-x-auto">
                 <!-- รายการคำสั่งซื้อจะถูกดึงและแสดงที่นี่ -->
             </div>
         </section>
@@ -1324,7 +1701,60 @@
                 console.error("❌ Error claiming order:", error.message);
                 alert("เกิดข้อผิดพลาดในการรับงาน: " + error.message);
             }
-        }        // เปิดกล้อง
+        }
+
+        // ✅ ฟังก์ชันสำหรับยกเลิกการรับออเดอร์
+        async function cancelOrderAssignment(orderId) {
+            // แสดงกล่องยืนยันก่อนยกเลิก
+            const confirmed = confirm("คุณต้องการยกเลิกการรับออเดอร์นี้ใช่หรือไม่?\n\nออเดอร์นี้จะกลับไปให้พนักงานคนอื่นสามารถรับงานได้");
+
+            if (!confirmed) {
+                return; // ถ้าผู้ใช้ยกเลิก ให้หยุดการทำงาน
+            }
+
+            const rawToken = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+
+            if (!rawToken) {
+                alert("❌ ไม่พบ Token สำหรับการยืนยันตัวตน");
+                return;
+            }
+
+            // แยก JWT token จาก "Bearer " prefix และ quotes
+            const token = rawToken.replace(/^"?Bearer\s+/, '').replace(/"/g, '');
+
+            try {
+                const response = await fetch(`http://192.168.0.44:8001/packing/orders/${orderId}/cancel-assignment`, {
+                    // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/cancel-assignment`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || "Failed to cancel order assignment");
+                }
+
+                const result = await response.json();
+                alert(`✅ ${result.message}`);
+
+                // ✅ ล้างข้อมูลออเดอร์ปัจจุบันและแสดงข้อความว่าไม่มีออเดอร์
+                localStorage.removeItem("currentOrderId");
+                displayOrderDetails(null);
+
+                // ✅ โหลดรายการออเดอร์ใหม่เพื่ออัพเดตสถานะ
+                loadPackingOrders();
+
+            } catch (error) {
+                console.error("❌ Error canceling order assignment:", error.message);
+                alert("เกิดข้อผิดพลาดในการยกเลิกการรับออเดอร์: " + error.message);
+            }
+        }
+
+        // เปิดกล้อง
         startCameraBtn.addEventListener('click', async () => {
             try {
                 const rawToken = document.cookie.split('; ')
@@ -1374,13 +1804,21 @@
 
                 // แสดงสถานะว่าหยุดการตรวจจับแล้ว
                 document.getElementById('detect-status').textContent = 'ยังไม่ได้เริ่มการตรวจจับ';
-                document.getElementById('detect-status').className = 'detect-status';
-
-                console.log('✅ ปิดกล้องและหยุดการตรวจจับแล้ว');
+                document.getElementById('detect-status').className = 'detect-status'; console.log('✅ ปิดกล้องและหยุดการตรวจจับแล้ว');
             } catch (error) {
                 console.error('❌ เกิดข้อผิดพลาดในการปิดกล้อง:', error.message);
                 alert('เกิดข้อผิดพลาดในการปิดกล้อง: ' + error.message);
             }
+        });
+
+        // ✅ Event Listener สำหรับ Confidence Threshold Slider
+        const confidenceSlider = document.getElementById('confidence-threshold');
+        const confidenceValue = document.getElementById('confidence-value');
+
+        confidenceSlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value).toFixed(1);
+            confidenceValue.textContent = value;
+            console.log(`🎯 Confidence threshold updated to: ${value}`);
         });
     </script>
 </body>
