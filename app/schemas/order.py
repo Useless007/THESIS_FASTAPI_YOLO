@@ -82,6 +82,10 @@ class OrderWithDetails(OrderOut):
 class VerifyRequest(BaseModel):
     verified: bool
 
+class DetectFromCameraRequest(BaseModel):
+    camera_id: int
+    order_id: int
+
 from app.schemas.product import ProductOut
 from app.schemas.user import UserBase
 from app.schemas.camera import CameraBase

@@ -235,3 +235,45 @@ def authenticate_account(email: str, password: str, db: Session):
         return account, False
         
     return None, False
+
+# ฟังก์ชันสำหรับดึงข้อมูลผู้ใช้จาก token โดยตรง (สำหรับใช้ใน stream endpoint)
+def get_current_user_from_token(token: str, db: Session) -> User:
+    """
+    ตรวจสอบ token และดึงข้อมูล User โดยตรง
+    ใช้สำหรับ endpoint ที่ไม่สามารถใช้ Depends ได้ เช่น stream endpoint
+    """
+    try:
+        # ตรวจสอบความถูกต้องของ token
+        payload = verify_token(token)
+        
+        # ดึงข้อมูลผู้ใช้
+        email = payload.get("sub")
+        is_customer = payload.get("is_customer", False)
+        
+        if not email:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+        
+        if is_customer:
+            raise HTTPException(status_code=403, detail="Customer access denied")
+        
+        # ดึงข้อมูล account
+        account = db.query(Account).filter(Account.email == email).first()
+        if not account:
+            raise HTTPException(status_code=401, detail="Account not found")
+        
+        # ตรวจสอบว่า account ยังเปิดใช้งานอยู่หรือไม่
+        if not account.is_active:
+            raise HTTPException(status_code=401, detail="Account is inactive")
+        
+        # ดึงข้อมูล user
+        user = db.query(User).filter(User.account_id == account.id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        
+        return user
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Error in get_current_user_from_token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Token verification failed")

@@ -12,14 +12,14 @@ from app.models.camera import Camera
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.product import Product
-from app.schemas.order import VerifyRequest
+from app.schemas.order import VerifyRequest, DetectFromCameraRequest
 from app.services.auth import get_user_with_role_and_position_and_isActive, get_current_user
 from app.database import get_db
 from app.services.ws_manager import notify_admin, notify_preparation
 from datetime import datetime
 import subprocess,json,shutil,torch,os,cv2,traceback,threading,time,re,base64
 import numpy as np
-from ultralytics import YOLO
+from ultralytics import YOLOv10 as YOLO
 from fastapi.templating import Jinja2Templates
 
 router = APIRouter(prefix="/packing", tags=["Packing Staff"])
@@ -239,11 +239,26 @@ async def snapshot(
 async def stream_video(
     request: Request,
     camera_id: int = Query(..., description="ID ของกล้องที่ต้องการสตรีม"),
-    token: str = Header(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+    token: str = Query(None, description="Bearer token สำหรับการยืนยันตัวตน"),
+    db: Session = Depends(get_db)
 ):
     global video_captures
+
+    # ตรวจสอบ token
+    if not token:
+        raise HTTPException(status_code=401, detail="Token required")
+    
+    try:
+        # ตรวจสอบความถูกต้องของ token
+        from app.services.auth import get_current_user_from_token
+        current_user = get_current_user_from_token(token, db)
+        
+        # ตรวจสอบว่าผู้ใช้มีสิทธิ์เป็น packing staff หรือไม่
+        if current_user.role_id != 1 or current_user.position_id != 4:
+            raise HTTPException(status_code=403, detail="Access denied: Packing staff only")
+            
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     # ดึงข้อมูลกล้องจาก DB
     camera = db.query(Camera).filter(Camera.id == camera_id).first()
@@ -830,7 +845,8 @@ async def detect_objects(
             print("❌ Failed to decode YOLO worker response.")
             raise HTTPException(status_code=500, detail="Invalid response from YOLO worker.")
 
-        response = JSONResponse(content={"detections": output.get("detections", []), "image_path": file_path, "annotated_image_path": output.get("annotated_image", "") })
+        response = JSONResponse(content={"detections": output.get("detections", []), "image_path": file_path,
+        "annotated_image_path": output.get("annotated_image", "") })
 
         # response = JSONResponse(content={"detections": [], "image_path": file_path}) # debug capture only comment out
 
@@ -840,6 +856,99 @@ async def detect_objects(
         print(f"❌ Unexpected error: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail="Unexpected server error during detection process.")
+
+
+# ✅ Route: ตรวจจับสินค้าจากกล้องโดยตรง
+@router.post("/detect-from-camera", response_class=JSONResponse)
+async def detect_from_camera(
+    request: DetectFromCameraRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+):
+    """
+    ตรวจจับวัตถุจากกล้องโดยตรง ส่งกลับพิกัดกรอบและการจำแนกว่าเป็นสินค้าในออเดอร์หรือไม่
+    """
+    global video_captures
+    
+    try:
+        # ตรวจสอบว่ามีกล้องในระบบหรือไม่
+        camera = db.query(Camera).filter(Camera.id == request.camera_id).first()
+        if not camera:
+            raise HTTPException(status_code=404, detail="Camera not found")
+          # ตรวจสอบว่ามีออเดอร์ในระบบหรือไม่
+        order = db.query(Order).filter(Order.order_id == request.order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        # ดึงรายการสินค้าในออเดอร์
+        order_items = db.query(OrderItem).join(Product).filter(
+            OrderItem.order_id == request.order_id
+        ).all()
+        
+        order_product_names = [item.product.name for item in order_items]
+        
+        # ตรวจสอบว่ากล้องเปิดอยู่หรือไม่
+        if request.camera_id not in video_captures or not video_captures[request.camera_id].isOpened():
+            # เปิดกล้องถ้ายังไม่เปิด
+            await start_camera(request.camera_id, camera.stream_url)
+        
+        # จับภาพจากกล้อง
+        success, frame = video_captures[request.camera_id].read()
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Cannot read frame from camera {request.camera_id}")
+        
+        # บันทึกภาพชั่วคราว
+        temp_image_path = os.path.join(UPLOAD_DIR, f"temp_camera_{request.camera_id}_{int(time.time())}.jpg")
+        cv2.imwrite(temp_image_path, frame)
+        
+        # ตรวจจับด้วย YOLO
+        device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+        results = model.predict(source=temp_image_path, conf=0.3, iou=0.45, stream=False, device=device)
+        
+        detections = []
+        for result in results:
+            for box in result.boxes.data:
+                x1, y1, x2, y2, conf, cls = box.tolist()
+                if conf > 0.3:
+                    label = model.names[int(cls)]
+                    detections.append({
+                        "label": label,
+                        "confidence": float(conf),
+                        "box": [float(x1), float(y1), float(x2), float(y2)],
+                    })
+        
+        # จำแนกว่าสินค้าไหนอยู่ในออเดอร์
+        in_order_items = []
+        for detection in detections:
+            detection_label = detection["label"]
+            # เช็คว่าชื่อสินค้าที่ตรวจพบตรงกับสินค้าในออเดอร์หรือไม่
+            for order_product in order_product_names:
+                if (detection_label.lower() in order_product.lower() or 
+                    order_product.lower() in detection_label.lower()):
+                    if detection_label not in in_order_items:
+                        in_order_items.append(detection_label)
+                    break
+        
+        # ลบไฟล์ชั่วคราว
+        if os.path.exists(temp_image_path):
+            os.remove(temp_image_path)
+        
+        # ล้าง GPU memory ถ้ามี
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        return JSONResponse(content={
+            "detections": detections,
+            "in_order_items": in_order_items,
+            "order_products": order_product_names,
+            "camera_id": request.camera_id,
+            "order_id": request.order_id
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in detect_from_camera: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Detection error: {str(e)}")
 
 
 # Endpoint สำหรับดึงรายชื่อกล้อง
