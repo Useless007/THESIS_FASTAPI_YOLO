@@ -213,6 +213,36 @@ def add_product_stock(
     
     return {"message": f"✅ เพิ่มสินค้า {product.name} จำนวน {quantity} ชิ้น เรียบร้อยแล้ว", "current_stock": product.stock}
 
+# ✅ แก้ไขราคาสินค้า
+@router.put("/products/update-price", response_class=JSONResponse)
+def update_product_price(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 3))
+):
+    """
+    แก้ไขราคาสินค้า
+    """
+    product_id = data.get("product_id")
+    new_price = data.get("new_price")
+    
+    if not product_id or new_price is None or new_price < 0:
+        raise HTTPException(status_code=400, detail="❌ ข้อมูลไม่ถูกต้อง กรุณาระบุ ID สินค้าและราคาใหม่ที่ถูกต้อง")
+    
+    # ค้นหาสินค้า
+    product = db.query(Product).filter(Product.product_id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="❌ ไม่พบสินค้าที่ระบุ")
+    
+    # เก็บราคาเดิมไว้สำหรับแสดงผล
+    old_price = product.price
+    
+    # อัพเดทราคาสินค้า
+    product.price = new_price
+    db.commit()
+    
+    return {"message": f"✅ แก้ไขราคาสินค้า {product.name} จาก ฿{old_price:,.2f} เป็น ฿{new_price:,.2f} เรียบร้อยแล้ว", "old_price": old_price, "new_price": new_price}
+
 @router.websocket("/notifications")
 async def preparation_notifications(websocket: WebSocket):
     """

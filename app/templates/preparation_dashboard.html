@@ -7,6 +7,123 @@
     <title>Preparation Staff Dashboard</title>
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
+    <style>
+        /* Custom Select Dropdown with Images */
+        .custom-select {
+            position: relative;
+            display: block;
+            width: 100%;
+        }
+
+        .custom-select-trigger {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: between;
+            padding: 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            background-color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .custom-select-trigger:hover {
+            border-color: #3b82f6;
+        }
+
+        .custom-select-trigger.active {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .custom-select-trigger-content {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .custom-select-image {
+            width: 24px;
+            height: 24px;
+            border-radius: 0.25rem;
+            margin-right: 0.5rem;
+            object-fit: cover;
+            border: 1px solid #e5e7eb;
+        }
+
+        .custom-select-arrow {
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 4px solid #6b7280;
+            transition: transform 0.2s;
+        }
+
+        .custom-select-trigger.active .custom-select-arrow {
+            transform: rotate(180deg);
+        }
+
+        .custom-select-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-top: none;
+            border-radius: 0 0 0.375rem 0.375rem;
+            max-height: 200px;
+            overflow-y: auto;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .custom-select-option {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .custom-select-option:hover {
+            background-color: #f3f4f6;
+        }
+
+        .custom-select-option.selected {
+            background-color: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .custom-select-option-image {
+            width: 24px;
+            height: 24px;
+            border-radius: 0.25rem;
+            margin-right: 0.75rem;
+            object-fit: cover;
+            border: 1px solid #e5e7eb;
+        }
+
+        .custom-select-option-placeholder {
+            width: 24px;
+            height: 24px;
+            border-radius: 0.25rem;
+            margin-right: 0.75rem;
+            background-color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            color: #6b7280;
+            border: 1px solid #e5e7eb;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
 </head>
 
 <body class="bg-gray-100">
@@ -63,8 +180,7 @@
                                             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                     </svg>
                                 </div>
-                            </div>
-                            <button onclick="openAddStockModal()"
+                            </div> <button onclick="openAddStockModal()"
                                 class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg shadow-md flex items-center ml-3">
                                 <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                                     xmlns="http://www.w3.org/2000/svg">
@@ -72,6 +188,16 @@
                                         d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                                 </svg>
                                 เพิ่มสินค้าคงคลัง
+                            </button>
+                            <button onclick="openEditPriceModal()"
+                                class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg shadow-md flex items-center ml-3">
+                                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m-2.599-3.5A3 3 0 0 0 12 19">
+                                    </path>
+                                </svg>
+                                แก้ไขราคา
                             </button>
                         </div>
                         <div class="flex flex-wrap gap-2 mt-4">
@@ -135,9 +261,7 @@
         // ตัวแปรสำหรับเก็บข้อมูลสินค้าคงเหลือ
         let inventoryData = [];
         let currentFilter = 'all';
-        let searchTerm = '';
-
-        // โหลดข้อมูลเมื่อหน้าเว็บโหลดเสร็จ
+        let searchTerm = '';        // โหลดข้อมูลเมื่อหน้าเว็บโหลดเสร็จ
         document.addEventListener('DOMContentLoaded', () => {
             loadConfirmedOrders();
             loadInventoryData();
@@ -386,31 +510,75 @@
         function openAddStockModal() {
             populateProductDropdown();
             document.getElementById('addStockModal').classList.remove('hidden');
-        }
-
-        // ปิด Modal สำหรับเพิ่มสินค้าคงคลัง
+        }        // ปิด Modal สำหรับเพิ่มสินค้าคงคลัง
         function closeAddStockModal() {
             document.getElementById('addStockModal').classList.add('hidden');
             document.getElementById('addStockForm').reset();
+
+            // รีเซ็ต custom select อย่างปลอดภัย
+            const hiddenInput = document.getElementById('product-select');
+            const trigger = document.getElementById('product-select-trigger');
+            const triggerContent = trigger.querySelector('.custom-select-trigger-content');
+            const options = document.getElementById('product-select-options');
+
+            if (hiddenInput) hiddenInput.value = '';
+            if (triggerContent) triggerContent.innerHTML = '<span>-- เลือกสินค้า --</span>';
+            if (trigger) trigger.classList.remove('active');
+            if (options) options.classList.add('hidden');
+
+            // ซ่อนรูปภาพ
+            hideProductImage();
+
+            // ลบจาก activeDropdowns set เพื่อให้สามารถ setup ใหม่ได้
+            activeDropdowns.delete('product-select');
         }        // เติมข้อมูลสินค้าใน dropdown
         function populateProductDropdown() {
-            const selectElement = document.getElementById('product-select');
+            const optionsContainer = document.getElementById('product-select-options');
+            const hiddenInput = document.getElementById('product-select');
+            const trigger = document.getElementById('product-select-trigger');
+            const triggerContent = trigger.querySelector('.custom-select-trigger-content');
+
+            // ตรวจสอบว่า elements มีอยู่จริง
+            if (!optionsContainer || !hiddenInput || !trigger || !triggerContent) {
+                console.error('ไม่พบ elements ที่จำเป็นสำหรับ product dropdown');
+                return;
+            }
+
             // เคลียร์ตัวเลือกที่มีอยู่
-            selectElement.innerHTML = '<option value="" selected disabled>-- เลือกสินค้า --</option>';
+            optionsContainer.innerHTML = '';
+            hiddenInput.value = '';
+            triggerContent.innerHTML = '<span>-- เลือกสินค้า --</span>';
 
             // เรียงลำดับสินค้าตามชื่อ
             const sortedProducts = [...inventoryData].sort((a, b) => a.name.localeCompare(b.name));
 
             // เพิ่มตัวเลือกสินค้าทั้งหมด
             sortedProducts.forEach(product => {
-                const option = document.createElement('option');
-                option.value = product.product_id;
-                option.textContent = `${product.name} (ID: ${product.product_id})`;
-                selectElement.appendChild(option);
+                const option = document.createElement('div');
+                option.className = 'custom-select-option';
+                option.setAttribute('data-value', product.product_id);
+                option.setAttribute('data-image', product.image_path || '');
+
+                const optionContent = `
+                    ${product.image_path ?
+                        `<img src="${product.image_path}" alt="${product.name}" class="custom-select-option-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                         <div class="custom-select-option-placeholder" style="display:none;">📦</div>` :
+                        `<div class="custom-select-option-placeholder">📦</div>`
+                    }
+                    <span>${product.name} (ID: ${product.product_id})</span>
+                `;
+                option.innerHTML = optionContent;
+
+                option.addEventListener('click', function () {
+                    selectProductOption('product-select', product.product_id, `${product.name} (ID: ${product.product_id})`, product.image_path);
+                    updateProductImage();
+                });
+
+                optionsContainer.appendChild(option);
             });
 
-            // เพิ่ม event listener เพื่อแสดงรูปภาพเมื่อเลือกสินค้า
-            selectElement.addEventListener('change', updateProductImage);
+            // Setup dropdown toggle
+            setupCustomSelect('product-select');
 
             // เคลียร์รูปภาพ
             hideProductImage();
@@ -505,11 +673,276 @@
                     alert(data.message || 'เพิ่มสินค้าเรียบร้อยแล้ว');
                     closeAddStockModal();
                     loadInventoryData(); // โหลดข้อมูลสินค้าคงเหลือใหม่
-                })
-                .catch(error => {
+                }).catch(error => {
                     console.error('❌ Error adding stock:', error);
                     alert(error.message || 'เกิดข้อผิดพลาดในการเพิ่มสินค้า');
                 });
+        }
+
+        // เปิด Modal สำหรับแก้ไขราคาสินค้า
+        function openEditPriceModal() {
+            populatePriceProductDropdown();
+            document.getElementById('editPriceModal').classList.remove('hidden');
+        }        // ปิด Modal สำหรับแก้ไขราคาสินค้า
+        function closeEditPriceModal() {
+            document.getElementById('editPriceModal').classList.add('hidden');
+            document.getElementById('editPriceForm').reset();
+
+            // รีเซ็ต custom select อย่างปลอดภัย
+            const hiddenInput = document.getElementById('price-product-select');
+            const trigger = document.getElementById('price-product-select-trigger');
+            const triggerContent = trigger.querySelector('.custom-select-trigger-content');
+            const options = document.getElementById('price-product-select-options');
+
+            if (hiddenInput) hiddenInput.value = '';
+            if (triggerContent) triggerContent.innerHTML = '<span>-- เลือกสินค้า --</span>';
+            if (trigger) trigger.classList.remove('active');
+            if (options) options.classList.add('hidden');
+
+            // ซ่อนรูปภาพ
+            hidePriceProductImage();
+
+            // ลบจาก activeDropdowns set เพื่อให้สามารถ setup ใหม่ได้
+            activeDropdowns.delete('price-product-select');
+        }        // เติมข้อมูลสินค้าใน dropdown สำหรับแก้ไขราคา
+        function populatePriceProductDropdown() {
+            const optionsContainer = document.getElementById('price-product-select-options');
+            const hiddenInput = document.getElementById('price-product-select');
+            const trigger = document.getElementById('price-product-select-trigger');
+            const triggerContent = trigger.querySelector('.custom-select-trigger-content');
+
+            // ตรวจสอบว่า elements มีอยู่จริง
+            if (!optionsContainer || !hiddenInput || !trigger || !triggerContent) {
+                console.error('ไม่พบ elements ที่จำเป็นสำหรับ price product dropdown');
+                return;
+            }
+
+            // เคลียร์ตัวเลือกที่มีอยู่
+            optionsContainer.innerHTML = '';
+            hiddenInput.value = '';
+            triggerContent.innerHTML = '<span>-- เลือกสินค้า --</span>';
+
+            // เรียงลำดับสินค้าตามชื่อ
+            const sortedProducts = [...inventoryData].sort((a, b) => a.name.localeCompare(b.name));
+
+            // เพิ่มตัวเลือกสินค้าทั้งหมด
+            sortedProducts.forEach(product => {
+                const option = document.createElement('div');
+                option.className = 'custom-select-option';
+                option.setAttribute('data-value', product.product_id);
+                option.setAttribute('data-image', product.image_path || '');
+
+                const optionContent = `
+                    ${product.image_path ?
+                        `<img src="${product.image_path}" alt="${product.name}" class="custom-select-option-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                         <div class="custom-select-option-placeholder" style="display:none;">📦</div>` :
+                        `<div class="custom-select-option-placeholder">📦</div>`
+                    }
+                    <span>${product.name} (ID: ${product.product_id})</span>
+                `;
+                option.innerHTML = optionContent;
+
+                option.addEventListener('click', function () {
+                    selectProductOption('price-product-select', product.product_id, `${product.name} (ID: ${product.product_id})`, product.image_path);
+                    updatePriceProductImage();
+                });
+
+                optionsContainer.appendChild(option);
+            });
+
+            // Setup dropdown toggle
+            setupCustomSelect('price-product-select');
+        }
+
+        // อัพเดทรูปภาพและข้อมูลสินค้าเมื่อเลือกจาก dropdown สำหรับแก้ไขราคา
+        function updatePriceProductImage() {
+            const productId = document.getElementById('price-product-select').value;
+            const productImage = document.getElementById('price-product-image');
+            const placeholder = document.getElementById('price-product-image-placeholder');
+            const productInfo = document.getElementById('price-product-info');
+            const currentPriceDisplay = document.getElementById('current-price-display');
+
+            if (!productId) {
+                hidePriceProductImage();
+                return;
+            }
+
+            // หาข้อมูลสินค้าจาก id
+            const product = inventoryData.find(p => p.product_id == productId);
+            if (product) {
+                // แสดงรูปภาพ
+                if (product.image_path) {
+                    productImage.src = product.image_path;
+                    productImage.alt = product.name;
+                    productImage.classList.remove('hidden');
+                    placeholder.classList.add('hidden');
+                } else {
+                    productImage.classList.add('hidden');
+                    placeholder.classList.remove('hidden');
+                }
+
+                // แสดงข้อมูลสินค้า
+                let productInfoText = `สต็อกปัจจุบัน: <span class="${getStockClass(product.stock)}">${product.stock} ชิ้น</span>`;
+                productInfo.innerHTML = productInfoText;
+
+                // แสดงราคาปัจจุบัน
+                currentPriceDisplay.value = `฿${product.price.toLocaleString()}`;
+            } else {
+                hidePriceProductImage();
+            }
+        }
+
+        // ซ่อนรูปภาพและข้อมูลสินค้าสำหรับแก้ไขราคา
+        function hidePriceProductImage() {
+            const productImage = document.getElementById('price-product-image');
+            const placeholder = document.getElementById('price-product-image-placeholder');
+            const productInfo = document.getElementById('price-product-info');
+            const currentPriceDisplay = document.getElementById('current-price-display');
+
+            productImage.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+            productInfo.textContent = '';
+            currentPriceDisplay.value = '';
+        }
+
+        // อัพเดทราคาสินค้า
+        function updatePrice() {
+            const productId = document.getElementById('price-product-select').value;
+            const newPrice = document.getElementById('new-price-input').value;
+
+            if (!productId) {
+                alert('กรุณาเลือกสินค้า');
+                return;
+            }
+
+            if (!newPrice || newPrice < 0) {
+                alert('กรุณาระบุราคาที่ถูกต้อง');
+                return;
+            }
+
+            const token = document.cookie.split('; ')
+                .find(row => row.startsWith('Authorization='))?.split('=')[1];
+
+            fetch('/preparation/products/update-price', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    product_id: parseInt(productId),
+                    new_price: parseFloat(newPrice)
+                })
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.detail || 'เกิดข้อผิดพลาดในการแก้ไขราคา');
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    alert(data.message || 'แก้ไขราคาเรียบร้อยแล้ว');
+                    closeEditPriceModal();
+                    loadInventoryData(); // โหลดข้อมูลสินค้าคงเหลือใหม่
+                })
+                .catch(error => {
+                    console.error('❌ Error updating price:', error);
+                    alert(error.message || 'เกิดข้อผิดพลาดในการแก้ไขราคา');
+                });
+        }        // Global variables สำหรับจัดการ event listeners
+        let globalClickHandlerAdded = false;
+        let activeDropdowns = new Set(); // เก็บ ID ของ dropdowns ที่ active
+
+        // ฟังก์ชันช่วยเหลือสำหรับ Custom Select - แก้ไขปัญหา cloneNode
+        function setupCustomSelect(selectId) {
+            const trigger = document.getElementById(`${selectId}-trigger`);
+            const options = document.getElementById(`${selectId}-options`);
+
+            if (!trigger || !options) return;
+
+            // ตรวจสอบว่าได้ติดตั้ง global click handler แล้วหรือยัง
+            if (!globalClickHandlerAdded) {
+                document.addEventListener('click', function (e) {
+                    const isClickInsideDropdown = e.target.closest('.custom-select');
+                    if (!isClickInsideDropdown) {
+                        // ปิด dropdown ทั้งหมดเมื่อคลิกข้างนอก
+                        document.querySelectorAll('.custom-select-trigger.active').forEach(trigger => {
+                            trigger.classList.remove('active');
+                        });
+                        document.querySelectorAll('.custom-select-options').forEach(options => {
+                            options.classList.add('hidden');
+                        });
+                        activeDropdowns.clear();
+                    }
+                });
+                globalClickHandlerAdded = true;
+            }
+
+            // ลบ event listener เก่า (หากมี) โดยไม่ใช้ cloneNode
+            if (activeDropdowns.has(selectId)) {
+                return; // หาก dropdown นี้ได้ setup แล้วก็ไม่ต้องทำซ้ำ
+            }
+
+            // เพิ่ม event listener ใหม่
+            trigger.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const isActive = trigger.classList.contains('active');
+
+                // ปิด dropdown อื่นๆ ทั้งหมด
+                document.querySelectorAll('.custom-select-trigger.active').forEach(t => {
+                    if (t !== trigger) {
+                        t.classList.remove('active');
+                    }
+                });
+                document.querySelectorAll('.custom-select-options').forEach(o => {
+                    if (o !== options) {
+                        o.classList.add('hidden');
+                    }
+                });
+
+                // Toggle dropdown ปัจจุบัน
+                if (!isActive) {
+                    trigger.classList.add('active');
+                    options.classList.remove('hidden');
+                } else {
+                    trigger.classList.remove('active');
+                    options.classList.add('hidden');
+                }
+            });
+
+            // เพิ่ม selectId เข้าไปใน Set เพื่อไม่ให้ setup ซ้ำ
+            activeDropdowns.add(selectId);
+        }
+
+        function selectProductOption(selectId, value, text, image) {
+            const hiddenInput = document.getElementById(selectId);
+            const trigger = document.getElementById(`${selectId}-trigger`);
+            const options = document.getElementById(`${selectId}-options`);
+            const triggerContent = trigger.querySelector('.custom-select-trigger-content');
+
+            // อัปเดตค่า
+            hiddenInput.value = value;
+
+            // อัปเดต UI ของ trigger
+            const imageHtml = image ?
+                `<img src="${image}" alt="${text}" class="custom-select-image" onerror="this.style.display='none';">` : '';
+
+            triggerContent.innerHTML = `${imageHtml}<span>${text}</span>`;
+
+            // ปิด dropdown
+            trigger.classList.remove('active');
+            options.classList.add('hidden');
+
+            // อัปเดต selected state ใน options
+            options.querySelectorAll('.custom-select-option').forEach(opt => {
+                opt.classList.remove('selected');
+            });
+            const selectedOption = options.querySelector(`[data-value="${value}"]`);
+            if (selectedOption) {
+                selectedOption.classList.add('selected');
+            }
         }
     </script> <!-- Modal สำหรับเพิ่มสินค้าเข้า stock -->
     <div id="addStockModal"
@@ -550,11 +983,19 @@
                         <div>
                             <label for="product-select"
                                 class="block mb-2 text-sm font-medium text-gray-700">เลือกสินค้า</label>
-                            <select id="product-select"
-                                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                                <option value="" selected disabled>-- เลือกสินค้า --</option>
-                                <!-- ตัวเลือกสินค้าจะถูกเพิ่มด้วย JavaScript -->
-                            </select>
+                            <div class="custom-select" id="product-select-wrapper">
+                                <div class="custom-select-trigger" id="product-select-trigger">
+                                    <div class="custom-select-trigger-content">
+                                        <span id="product-select-text">-- เลือกสินค้า --</span>
+                                    </div>
+                                    <div class="custom-select-arrow"></div>
+                                </div>
+                                <div class="custom-select-options hidden" id="product-select-options">
+                                    <!-- ตัวเลือกสินค้าจะถูกเพิ่มด้วย JavaScript -->
+                                </div>
+                            </div>
+                            <!-- Hidden input เพื่อเก็บค่าที่เลือก -->
+                            <input type="hidden" id="product-select" name="product-select">
                         </div>
                         <div>
                             <label for="quantity-input"
@@ -567,6 +1008,86 @@
                                 class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">ยกเลิก</button>
                             <button type="button" onclick="addStock()"
                                 class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">บันทึก</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal สำหรับแก้ไขราคาสินค้า -->
+    <div id="editPriceModal"
+        class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-2xl w-full">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">💰 แก้ไขราคาสินค้า</h3>
+                <button onclick="closeEditPriceModal()" class="text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg>
+                </button>
+            </div>
+            <div class="grid grid-cols-3 gap-4">
+                <!-- รูปภาพสินค้าทางซ้ายมือ -->
+                <div class="col-span-1 flex flex-col items-center justify-center">
+                    <div id="price-product-image-container"
+                        class="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center mb-2 overflow-hidden">
+                        <div id="price-product-image-placeholder" class="text-center p-2">
+                            <svg class="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                            <p class="text-sm text-gray-500">เลือกสินค้าเพื่อดูรูปภาพ</p>
+                        </div>
+                        <img id="price-product-image" class="hidden w-full h-full object-contain" src=""
+                            alt="รูปภาพสินค้า">
+                    </div>
+                    <p id="price-product-info" class="text-sm text-center text-gray-500 mt-2"></p>
+                </div>
+
+                <!-- ฟอร์มทางขวามือ -->
+                <div class="col-span-2">
+                    <form id="editPriceForm" class="space-y-4">
+                        <div>
+                            <label for="price-product-select"
+                                class="block mb-2 text-sm font-medium text-gray-700">เลือกสินค้า</label>
+                            <div class="custom-select" id="price-product-select-wrapper">
+                                <div class="custom-select-trigger" id="price-product-select-trigger">
+                                    <div class="custom-select-trigger-content">
+                                        <span id="price-product-select-text">-- เลือกสินค้า --</span>
+                                    </div>
+                                    <div class="custom-select-arrow"></div>
+                                </div>
+                                <div class="custom-select-options hidden" id="price-product-select-options">
+                                    <!-- ตัวเลือกสินค้าจะถูกเพิ่มด้วย JavaScript -->
+                                </div>
+                            </div>
+                            <!-- Hidden input เพื่อเก็บค่าที่เลือก -->
+                            <input type="hidden" id="price-product-select" name="price-product-select">
+                        </div>
+                        <div>
+                            <label for="current-price-display"
+                                class="block mb-2 text-sm font-medium text-gray-700">ราคาปัจจุบัน</label>
+                            <input type="text" id="current-price-display" readonly
+                                class="bg-gray-100 border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2.5"
+                                placeholder="เลือกสินค้าเพื่อแสดงราคาปัจจุบัน">
+                        </div>
+                        <div>
+                            <label for="new-price-input" class="block mb-2 text-sm font-medium text-gray-700">ราคาใหม่
+                                (บาท)</label>
+                            <input type="number" id="new-price-input" min="0" step="0.01"
+                                class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                placeholder="กรุณาระบุราคาใหม่">
+                        </div>
+                        <div class="flex justify-end space-x-2 pt-4">
+                            <button type="button" onclick="closeEditPriceModal()"
+                                class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">ยกเลิก</button>
+                            <button type="button" onclick="updatePrice()"
+                                class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600">บันทึก</button>
                         </div>
                     </form>
                 </div>
