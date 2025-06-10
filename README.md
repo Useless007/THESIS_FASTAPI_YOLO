@@ -109,3 +109,5 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
 ```python
 uvicorn app.server_packing:app --host 0.0.0.0 --port 8001 --reload --log-level debug
 ```
+
+ทีนี้ผมมีไอเดียอย่างนึงคือเมื่อมีการเพิ่มสินค้า อยากให้มมันมีการเก็บ invoice id ด้วย เช่น INV-1001 อะไรงี้เพื่อความเป็นระเบียบ โดยให้สร้าง table มาใหม่

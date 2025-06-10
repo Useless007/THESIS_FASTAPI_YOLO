@@ -177,7 +177,9 @@
                     <div class="px-4 py-3">
                         <span class="block text-sm text-gray-900 dark:text-white">อีเมล</span>
                         <span id="user-email"
-                            class="block text-sm  text-gray-500 truncate dark:text-gray-400">email@domain.com</span>
+                            class="block text-sm text-gray-500 truncate dark:text-gray-400">email@domain.com</span>
+                        <span id="user-name"
+                            class="block text-sm font-semibold text-gray-900 dark:text-white mt-1">ชื่อผู้ใช้</span>
                     </div>
                     <ul class="py-2" aria-labelledby="user-menu-button">
                         <li id="executive-dashboard" class="hidden">
@@ -432,7 +434,7 @@
                         <!-- ชื่อสินค้า -->
                         <h3 class="text-lg font-semibold text-gray-800 mb-1 line-clamp-2">{{ product.name }}</h3>
 
-                        <!-- คำอธิบายสินค้า - ใช้ tooltip แสดงข้อความเต็มเมื่อ hover -->
+                        <!-- คำอธิบายสินค้า - ใช้ tooltip แสดงเต็มเมื่อ hover -->
                         <div class="group relative mb-2">
                             <p
                                 class="text-gray-600 text-sm h-20 overflow-hidden line-clamp-3 group-hover:text-blue-600 transition-colors">
@@ -505,59 +507,84 @@
                 console.error('Failed to parse JWT:', e);
                 return null;
             }
-        }
-
-        // ฟังก์ชันตรวจสอบสถานะการล็อกอินและแสดง Email
+        }        // ฟังก์ชันตรวจสอบสถานะการล็อกอินและแสดง Email + ชื่อผู้ใช้
         function checkLoginStatus() {
-            document.addEventListener('DOMContentLoaded', () => {
-                // อ่าน Cookie ทั้งหมด
-                const cookies = document.cookie.split('; ').reduce((acc, cookie) => {
-                    const [name, value] = cookie.split('=');
-                    acc[name] = value;
-                    return acc;
-                }, {});
+            // อ่าน Cookie ทั้งหมด
+            const cookies = document.cookie.split('; ').reduce((acc, cookie) => {
+                const [name, value] = cookie.split('=');
+                acc[name] = value;
+                return acc;
+            }, {});
 
-                // console.log("🍪 Cookies:", cookies);
+            // ดึงค่า Authorization
+            let token = cookies['Authorization'];
 
-                // ดึงค่า Authorization
-                let token = cookies['Authorization'];
+            if (token) {
+                token = token.replace(/^"|"$/g, '');
+            }
 
-                if (token) {
-                    token = token.replace(/^"|"$/g, '');
-                }
+            // ตรวจสอบ JWT Token
+            if (token && token.startsWith('Bearer')) {
+                hidePromoBanner();
 
-                // console.log("🔑 Authorization Token:", token);
+                document.getElementById('logout-button').classList.remove('hidden');
+                document.getElementById('login-button').classList.add('hidden');
+                document.getElementById('cart-button').classList.remove('hidden');
+                document.getElementById('settings-button').classList.remove('hidden');
+                document.getElementById('orders-button').classList.remove('hidden');
 
-                // ตรวจสอบ JWT Token
-                if (token && token.startsWith('Bearer')) {
-                    hidePromoBanner();
+                // ถอดรหัส JWT Token เพื่อแสดงอีเมล
+                const decoded = parseJwt(token.replace('Bearer ', ''));
 
-                    document.getElementById('logout-button').classList.remove('hidden');
-                    document.getElementById('login-button').classList.add('hidden');
-                    document.getElementById('cart-button').classList.remove('hidden');
-                    document.getElementById('settings-button').classList.remove('hidden');
-                    document.getElementById('orders-button').classList.remove('hidden');
-                    // console.log("✅ User is logged in");
-
-                    // ถอดรหัส JWT Token
-                    const decoded = parseJwt(token.replace('Bearer ', ''));
-                    // console.log("📧 Decoded JWT Payload:", decoded);
-
-                    if (decoded && decoded.sub) {
-                        document.getElementById('user-email').textContent = decoded.sub; // แสดง Email
-                    } else {
-                        document.getElementById('user-email').textContent = 'ไม่พบอีเมล';
-                    }
+                if (decoded && decoded.sub) {
+                    document.getElementById('user-email').textContent = decoded.sub;
                 } else {
-                    document.getElementById('logout-button').classList.add('hidden');
-                    document.getElementById('login-button').classList.remove('hidden');
-                    document.getElementById('user-email').textContent = 'Guest';
-                    document.getElementById('cart-button').classList.add('hidden');
-                    document.getElementById('settings-button').classList.add('hidden');
-                    document.getElementById('orders-button').classList.add('hidden');
-                    // console.log("❌ User is not logged in");
+                    document.getElementById('user-email').textContent = 'ไม่พบอีเมล';
                 }
-            });
+
+                // เรียกใช้ API เพื่อดึงข้อมูลผู้ใช้เพิ่มเติม รวมถึงชื่อ
+                fetch('/users/profile', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': token
+                    }
+                })
+                    .then(response => {
+                        if (response.ok) {
+                            return response.json();
+                        } else {
+                            throw new Error('ไม่สามารถดึงข้อมูลผู้ใช้ได้');
+                        }
+                    })
+                    .then(userData => {
+                        console.log('User data received:', userData); // เพิ่ม console.log เพื่อ debug
+                        // แสดงชื่อผู้ใช้
+                        if (userData.name) {
+                            const userNameElement = document.getElementById('user-name');
+                            if (userNameElement) {
+                                userNameElement.textContent = userData.name;
+                                console.log('User name set to:', userData.name);
+                            } else {
+                                console.error('user-name element not found');
+                            }
+                        } else {
+                            document.getElementById('user-name').textContent = 'ไม่พบชื่อผู้ใช้';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching user profile:', error);
+                        document.getElementById('user-name').textContent = 'ไม่สามารถโหลดชื่อได้';
+                    });
+
+            } else {
+                document.getElementById('logout-button').classList.add('hidden');
+                document.getElementById('login-button').classList.remove('hidden');
+                document.getElementById('user-email').textContent = 'Guest';
+                document.getElementById('user-name').textContent = '';
+                document.getElementById('cart-button').classList.add('hidden');
+                document.getElementById('settings-button').classList.add('hidden');
+                document.getElementById('orders-button').classList.add('hidden');
+            }
         }
 
         // ฟังก์ชันเพิ่มสินค้าไปยังตะกร้า
@@ -652,7 +679,10 @@
         }
 
         // เรียกใช้ฟังก์ชัน
-        checkLoginStatus();
+        // รอให้ DOM โหลดเสร็จแล้วค่อยตรวจสอบสถานะการล็อกอิน
+        document.addEventListener('DOMContentLoaded', () => {
+            checkLoginStatus();
+        });
     </script>
 
 

@@ -392,8 +392,17 @@
             background-color: #f9f9f9;
         }
     </style>
+    <script>
+        // ✅ ตัวแปรสำหรับระบบหยุดอัตโนมัติและล็อคตำแหน่ง
+        let consecutiveMatchFrames = 0;
+        let autoStopThreshold = 4; // จำนวนเฟรมที่ต้องตรงกันก่อนหยุดอัตโนมัติ
+        let isAutoStopped = false;
+        let lockedDetectionResults = null; // เก็บผลการตรวจจับที่ล็อคไว้
+        let lockedOrderItems = {}; // เก็บรายการสินค้าในออเดอร์ที่ล็อคไว้
+        let lockedExtraItems = {}; // เก็บรายการสินค้าเกินที่ล็อคไว้
+        let lastDetectionState = null; // เก็บสถานะการตรวจจับครั้งล่าสุด
 
-    <script>        // ✅ โหลดออเดอร์ที่รับมาแล้วตอนเปิดหน้าเว็บ
+        // ✅ โหลดออเดอร์ที่รับมาแล้วตอนเปิดหน้าเว็บ
         async function loadCurrentOrder() {
             const rawToken = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
@@ -748,15 +757,13 @@
             const token = rawToken.replace(/^"?Bearer\s+/, '').replace(/"/g, '');
 
             const formData = new FormData();
-            formData.append("verified", isVerified);
-
-            // ตรวจสอบว่ามี dual-stream ที่ทำงานอยู่หรือไม่
+            formData.append("verified", isVerified);            // ตรวจสอบว่ามี dual-stream ที่ทำงานอยู่หรือไม่
             const rawStreamImg = document.getElementById('raw-stream');
             const capturedImage = document.getElementById('captured-image');
             let imageBlob = null;
 
             // กรณีที่ 1: ใช้ภาพจาก dual-stream ที่กำลังแสดงอยู่
-            if (window.dualStreamWS && rawStreamImg.src && rawStreamImg.src.startsWith('data:image/jpeg;base64,')) {
+            if (window.dualStreamWS && rawStreamImg && rawStreamImg.src && rawStreamImg.src.startsWith('data:image/jpeg;base64,')) {
                 try {
                     // แปลง data URL เป็น Blob
                     const base64Data = rawStreamImg.src.split(',')[1];
@@ -773,7 +780,7 @@
                 }
             }
             // กรณีที่ 2: ใช้ภาพที่ถ่ายไว้แล้ว (ถ้ามี)
-            else if (capturedImage.src && capturedImage.src.startsWith("blob")) {
+            else if (capturedImage && capturedImage.src && capturedImage.src.startsWith("blob")) {
                 try {
                     const response = await fetch(capturedImage.src);
                     imageBlob = await response.blob();
@@ -781,7 +788,7 @@
                 } catch (e) {
                     console.error("❌ เกิดข้อผิดพลาดในการดึงรูปภาพที่ถ่าย:", e);
                 }
-            }            // ถ้ามีรูปภาพ ให้แนบไปกับคำขอ
+            }// ถ้ามีรูปภาพ ให้แนบไปกับคำขอ
             if (imageBlob) {
                 formData.append("file", imageBlob, "verify_image.jpg");
             } else {
@@ -1053,7 +1060,7 @@
             localStorage.setItem("currentOrderId", orderData.order_id);
 
             console.log(`✅ Successfully displayed order ${orderData.order_id} with ${orderData.items.length} items and proper image loading`);
-        }// ✅ ฟังก์ชันเริ่มการตรวจจับวัตถุ
+        }        // ✅ ฟังก์ชันเริ่มการตรวจจับวัตถุ - แก้ไขเพื่อรองรับการหยุดอัตโนมัติ
         async function startDetection() {
             try {
                 const rawToken = document.cookie.split('; ')
@@ -1070,6 +1077,14 @@
                     throw new Error('❌ กรุณาเลือกกล้องก่อน');
                 }
 
+                // ✅ รีเซ็ตตัวแปรการหยุดอัตโนมัติ
+                consecutiveMatchFrames = 0;
+                isAutoStopped = false;
+                lockedDetectionResults = null;
+                lockedOrderItems = {};
+                lockedExtraItems = {};
+                lastDetectionState = null;
+
                 // อัพเดตสถานะปุ่ม
                 startDetectionBtn.disabled = true;
                 stopDetectionBtn.disabled = false;
@@ -1085,6 +1100,12 @@
                 // เริ่มการตรวจจับ
                 detectionInterval = setInterval(async () => {
                     if (!isDetecting) return;
+
+                    // ✅ ถ้าหยุดอัตโนมัติแล้ว ไม่ต้องตรวจจับใหม่
+                    if (isAutoStopped) {
+                        console.log('🔒 ระบบหยุดอัตโนมัติแล้ว ไม่ตรวจจับใหม่');
+                        return;
+                    }
 
                     try {
                         await performDetection();
@@ -1113,6 +1134,9 @@
                 }
 
                 isDetecting = false;
+                // ✅ รีเซ็ตสถานะการหยุดอัตโนมัติเมื่อหยุดด้วยตนเอง
+                isAutoStopped = false;
+                consecutiveMatchFrames = 0;
 
                 // อัพเดตสถานะปุ่ม
                 startDetectionBtn.disabled = false;
@@ -1181,8 +1205,15 @@
             } catch (error) {
                 console.error('❌ เกิดข้อผิดพลาดในการตรวจจับ:', error.message);
             }
-        }        // ✅ ฟังก์ชันแสดงผลการตรวจจับ
+        }        // ✅ ฟังก์ชันแสดงผลการตรวจจับ - ปรับปรุงให้มีระบบล็อค
         function displayDetectionResults(result) {
+            // ✅ ถ้าระบบหยุดอัตโนมัติแล้ว ใช้ข้อมูลที่ล็อคไว้
+            if (isAutoStopped && lockedDetectionResults) {
+                console.log('🔒 ใช้ข้อมูลที่ล็อคไว้แล้ว');
+                displayLockedResults();
+                return;
+            }
+
             // ล้าง canvas ก่อน - ลบกรอบเก่าที่ยังค้างอยู่
             const detectionCanvas = document.getElementById('detection-canvas');
             const canvasCtx = detectionCanvas.getContext('2d');
@@ -1190,33 +1221,31 @@
 
             // แสดงรายการวัตถุที่ตรวจพบ
             const detectionList = document.getElementById('detection-list');
-            detectionList.innerHTML = ''; if (!result.detections || result.detections.length === 0) {
+
+            if (!result.detections || result.detections.length === 0) {
                 detectionList.innerHTML = '<div class="text-gray-500">ไม่พบวัตถุใดในภาพ</div>';
-                // ล้าง canvas เมื่อไม่มีการตรวจจับและ return
                 canvasCtx.clearRect(0, 0, detectionCanvas.width, detectionCanvas.height);
-                // ซ่อน verification status เมื่อไม่มีการตรวจจับ
                 const verificationStatus = document.getElementById('verification-status');
                 verificationStatus.innerHTML = '';
                 verificationStatus.style.display = 'none';
-
-                // เรียก checkOrderItemsMatch ด้วย object ว่างเพื่อให้แน่ใจว่า verification status ถูกซ่อน
                 checkOrderItemsMatch({});
                 return;
-            }// ดึงค่า confidence threshold จาก UI slider
+            }
+
+            // ดึงค่า confidence threshold จาก UI slider
             const confidenceThreshold = parseFloat(document.getElementById('confidence-threshold').value);
 
             // กรองเฉพาะวัตถุที่มี confidence มากกว่าค่าที่กำหนด
             const filteredDetections = result.detections.filter(detection => detection.confidence > confidenceThreshold);
 
-            console.log(`📊 Detection Results stats: Total: ${result.detections.length}, High confidence (>${confidenceThreshold}): ${filteredDetections.length}`);            // ตรวจสอบว่ามีวัตถุที่ผ่านเกณฑ์ confidence หรือไม่
+            console.log(`📊 Detection Results stats: Total: ${result.detections.length}, High confidence (>${confidenceThreshold}): ${filteredDetections.length}`);
+
+            // ตรวจสอบว่ามีวัตถุที่ผ่านเกณฑ์ confidence หรือไม่
             if (filteredDetections.length === 0) {
                 detectionList.innerHTML = `<div class="detection-item text-gray-500">ไม่พบวัตถุที่มีความเชื่อมั่น > ${(confidenceThreshold * 100).toFixed(0)}%</div>`;
-                // ซ่อน verification status เมื่อไม่มีวัตถุที่ผ่านเกณฑ์ confidence
                 const verificationStatus = document.getElementById('verification-status');
                 verificationStatus.innerHTML = '';
                 verificationStatus.style.display = 'none';
-
-                // เรียก checkOrderItemsMatch ด้วย object ว่างเพื่อให้แน่ใจว่า verification status ถูกซ่อน
                 checkOrderItemsMatch({});
                 return;
             }
@@ -1228,29 +1257,134 @@
                 counts[label] = (counts[label] || 0) + 1;
             });
 
-            // แสดงผลลัพธ์ในรายการ
-            for (const [label, count] of Object.entries(counts)) {
-                const item = document.createElement('div');
-                item.className = 'detection-item';
+            // ✅ แยกสินค้าในออเดอร์และสินค้าเกิน
+            const orderItems = {};
+            const extraItems = {};
 
-                // ตรวจสอบว่าเป็นสินค้าในออเดอร์หรือไม่
+            Object.keys(counts).forEach(label => {
                 const isInOrder = result.in_order_items && result.in_order_items.includes(label);
-                const color = isInOrder ? 'text-green-600' : 'text-red-600';
-                const icon = isInOrder ? '✅' : '❌';
+                if (isInOrder) {
+                    orderItems[label] = counts[label];
+                } else {
+                    extraItems[label] = counts[label];
+                }
+            });
 
-                item.innerHTML = `
-                    <span class="font-bold">${icon} ${label}</span> 
-                    <span class="${color}">${count} ชิ้น</span>
-                `;
-                detectionList.appendChild(item);
+            // ✅ ตรวจสอบสถานะความครบถ้วนของออเดอร์
+            const orderComplete = checkIfOrderComplete(orderItems, result.in_order_items || []);
+
+            // ✅ ระบบหยุดอัตโนมัติ - ตรวจสอบว่าสินค้าครบและไม่เกิน
+            if (orderComplete && Object.keys(extraItems).length === 0) {
+                consecutiveMatchFrames++;
+                console.log(`✅ เฟรมที่ตรงกัน: ${consecutiveMatchFrames}/${autoStopThreshold}`);
+
+                if (consecutiveMatchFrames >= autoStopThreshold) {
+                    isAutoStopped = true;
+                    lockedDetectionResults = result;
+                    lockedOrderItems = { ...orderItems };
+                    lockedExtraItems = { ...extraItems };
+
+                    // อัพเดตสถานะ
+                    document.getElementById('detect-status').textContent = '🔒 หยุดอัตโนมัติ - สินค้าครบแล้ว';
+                    document.getElementById('detect-status').className = 'detect-status success';
+
+                    console.log('🔒 หยุดการตรวจจับอัตโนมัติ - สินค้าครบถ้วน');
+                }
+            } else {
+                consecutiveMatchFrames = 0; // รีเซ็ตถ้าไม่ตรงเงื่อนไข
             }
 
-            // วาดกรอบบน canvas (ใช้ข้อมูลที่ผ่านการกรองแล้ว)
+            // แสดงผลรายการสินค้าที่ล็อคตำแหน่ง
+            displayOrderItemsList(orderItems, extraItems);
+
+            // วาดกรอบบน canvas
             drawDetectionBoxes(filteredDetections, result.in_order_items || []);
 
-            // ตรวจสอบการจับคู่กับออเดอร์ (ใช้ counts ที่มาจากข้อมูลที่ผ่านการกรองแล้ว)
+            // ตรวจสอบการจับคู่กับออเดอร์
             checkOrderItemsMatch(counts);
-        }        // ✅ ฟังก์ชันวาดกรอบการตรวจจับ
+        }
+
+        // ✅ ฟังก์ชันตรวจสอบว่าออเดอร์ครบหรือไม่
+        function checkIfOrderComplete(detectedOrderItems, requiredOrderItems) {
+            // ดึงข้อมูลออเดอร์จาก DOM
+            const currentOrderDiv = document.getElementById('current-order');
+            const orderItemElements = currentOrderDiv.querySelectorAll('li');
+
+            const requiredItems = {};
+            orderItemElements.forEach(item => {
+                const productNameElement = item.querySelector('strong');
+                if (!productNameElement) return;
+
+                const productName = productNameElement.textContent.trim();
+                const itemText = item.textContent.trim();
+                const quantityMatch = itemText.match(/(\d+)\s+ชิ้น/);
+                const quantity = quantityMatch ? parseInt(quantityMatch[1]) : 1;
+
+                requiredItems[productName] = quantity;
+            });
+
+            // ตรวจสอบว่าทุกรายการครบหรือไม่
+            for (const [productName, requiredQty] of Object.entries(requiredItems)) {
+                let detectedQty = 0;
+
+                Object.keys(detectedOrderItems).forEach(label => {
+                    if (label.toLowerCase().includes(productName.toLowerCase()) ||
+                        productName.toLowerCase().includes(label.toLowerCase())) {
+                        detectedQty = detectedOrderItems[label];
+                    }
+                });
+
+                if (detectedQty < requiredQty) {
+                    return false; // ยังไม่ครบ
+                }
+            }
+
+            return true; // ครบแล้ว
+        }
+
+        // ✅ ฟังก์ชันแสดงรายการสินค้าที่ล็อคตำแหน่ง
+        function displayOrderItemsList(orderItems, extraItems) {
+            const detectionList = document.getElementById('detection-list');
+            detectionList.innerHTML = '';
+
+            // แสดงสินค้าในออเดอร์ก่อน (เรียงตามลำดับเดิม)
+            Object.keys(orderItems).sort().forEach(label => {
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.innerHTML = `
+                    <span class="font-bold">✅ ${label}</span> 
+                    <span class="text-green-600">${orderItems[label]} ชิ้น</span>
+                `;
+                detectionList.appendChild(item);
+            });
+
+            // แสดงสินค้าเกิน (ถ้ามี) - ไม่แสดงในรายการหลัก
+            // สินค้าเกินจะแสดงในส่วน verification status แทน
+        }
+
+        // ✅ ฟังก์ชันแสดงผลข้อมูลที่ล็อคไว้
+        function displayLockedResults() {
+            const detectionList = document.getElementById('detection-list');
+            detectionList.innerHTML = '';
+
+            // แสดงสินค้าในออเดอร์ที่ล็อคไว้
+            Object.keys(lockedOrderItems).sort().forEach(label => {
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.innerHTML = `
+                    <span class="font-bold">✅ ${label}</span> 
+                    <span class="text-green-600">${lockedOrderItems[label]} ชิ้น</span>
+                `;
+                detectionList.appendChild(item);
+            });
+
+            // วาดกรอบที่ล็อคไว้
+            if (lockedDetectionResults) {
+                const confidenceThreshold = parseFloat(document.getElementById('confidence-threshold').value);
+                const filteredDetections = lockedDetectionResults.detections.filter(detection => detection.confidence > confidenceThreshold);
+                drawDetectionBoxes(filteredDetections, lockedDetectionResults.in_order_items || []);
+            }
+        }// ✅ ฟังก์ชันวาดกรอบการตรวจจับ
         function drawDetectionBoxes(detections, inOrderItems) {
             const cameraStreamImg = document.getElementById('camera-stream');
             const detectionCanvas = document.getElementById('detection-canvas');
