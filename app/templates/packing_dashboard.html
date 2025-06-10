@@ -1088,11 +1088,10 @@
                 // อัพเดตสถานะปุ่ม
                 startDetectionBtn.disabled = true;
                 stopDetectionBtn.disabled = false;
-                isDetecting = true;
-
-                // แสดงสถานะ
+                isDetecting = true;                // แสดงสถานะ
                 document.getElementById('detect-status').textContent = 'กำลังตรวจจับวัตถุ...';
                 document.getElementById('detect-status').className = 'detect-status loading';
+                updateDetectionStatus('detecting', 0);
 
                 // แสดง detection results
                 document.getElementById('detection-results').style.display = 'block';
@@ -1153,11 +1152,10 @@
 
                 // ล้างรายการการตรวจจับ
                 const detectionList = document.getElementById('detection-list');
-                detectionList.innerHTML = '';
-
-                // แสดงสถานะ
+                detectionList.innerHTML = '';                // แสดงสถานะ
                 document.getElementById('detect-status').textContent = 'หยุดการตรวจจับแล้ว';
                 document.getElementById('detect-status').className = 'detect-status';
+                updateDetectionStatus('idle');
 
                 console.log('✅ หยุดการตรวจจับสำเร็จ และล้าง canvas แล้ว');
 
@@ -1230,10 +1228,8 @@
                 verificationStatus.style.display = 'none';
                 checkOrderItemsMatch({});
                 return;
-            }
-
-            // ดึงค่า confidence threshold จาก UI slider
-            const confidenceThreshold = parseFloat(document.getElementById('confidence-threshold').value);
+            }            // ดึงค่า confidence threshold คงที่ (0.7)
+            const confidenceThreshold = 0.7;
 
             // กรองเฉพาะวัตถุที่มี confidence มากกว่าค่าที่กำหนด
             const filteredDetections = result.detections.filter(detection => detection.confidence > confidenceThreshold);
@@ -1276,12 +1272,11 @@
             });
 
             // ✅ ตรวจสอบสถานะความครบถ้วนของออเดอร์
-            const orderComplete = checkIfOrderComplete(orderItems, result.in_order_items || []);
-
-            // ✅ ระบบหยุดอัตโนมัติ - ตรวจสอบว่าสินค้าครบและไม่เกิน
+            const orderComplete = checkIfOrderComplete(orderItems, result.in_order_items || []);            // ✅ ระบบหยุดอัตโนมัติ - ตรวจสอบว่าสินค้าครบและไม่เกิน
             if (orderComplete && Object.keys(extraItems).length === 0) {
                 consecutiveMatchFrames++;
                 console.log(`✅ เฟรมที่ตรงกัน: ${consecutiveMatchFrames}/${autoStopThreshold}`);
+                updateDetectionStatus('detecting', consecutiveMatchFrames);
 
                 if (consecutiveMatchFrames >= autoStopThreshold) {
                     isAutoStopped = true;
@@ -1292,11 +1287,13 @@
                     // อัพเดตสถานะ
                     document.getElementById('detect-status').textContent = '🔒 หยุดอัตโนมัติ - สินค้าครบแล้ว';
                     document.getElementById('detect-status').className = 'detect-status success';
+                    updateDetectionStatus('complete');
 
                     console.log('🔒 หยุดการตรวจจับอัตโนมัติ - สินค้าครบถ้วน');
                 }
             } else {
                 consecutiveMatchFrames = 0; // รีเซ็ตถ้าไม่ตรงเงื่อนไข
+                updateDetectionStatus('detecting', 0);
             }
 
             // แสดงผลรายการสินค้าที่ล็อคตำแหน่ง
@@ -1395,11 +1392,9 @@
                     <span class="text-green-600">${lockedOrderItems[label]} ชิ้น</span>
                 `;
                 detectionList.appendChild(item);
-            });
-
-            // วาดกรอบที่ล็อคไว้
+            });            // วาดกรอบที่ล็อคไว้
             if (lockedDetectionResults) {
-                const confidenceThreshold = parseFloat(document.getElementById('confidence-threshold').value);
+                const confidenceThreshold = 0.7; // ใช้ค่าคงที่
                 const filteredDetections = lockedDetectionResults.detections.filter(detection => detection.confidence > confidenceThreshold);
                 // ✅ ส่ง irrelevant_objects ด้วยเมื่อวาดกรอบ
                 drawDetectionBoxes(filteredDetections, lockedDetectionResults.in_order_items || [], lockedDetectionResults.irrelevant_objects || []);
@@ -1467,29 +1462,29 @@
             });            // ✅ วาดกรอบสำหรับ irrelevant objects (สิ่งแปลกปลอม) - เฉพาะในพื้นที่ที่ไม่มีกรอบ YOLO
             if (irrelevantObjects && irrelevantObjects.length > 0) {
                 let drawnIrrelevantCount = 0;
-                
+
                 irrelevantObjects.forEach((obj, index) => {
                     const [x1, y1, x2, y2] = obj.box;
 
                     // ตรวจสอบว่ากรอบ irrelevant object ทับซ้อนกับกรอบ YOLO หรือไม่ (เข้มงวดขึ้น)
                     let isOverlappingWithYolo = false;
-                    
+
                     for (const detection of detections) {
                         const [yoloX1, yoloY1, yoloX2, yoloY2] = detection.box;
-                        
+
                         // ตรวจสอบการทับซ้อนแบบง่าย - ถ้ามีการทับซ้อนเลยแม้นิดเดียว
                         const isOverlapping = !(x2 < yoloX1 || x1 > yoloX2 || y2 < yoloY1 || y1 > yoloY2);
-                        
+
                         if (isOverlapping) {
                             // คำนวณเปอร์เซ็นต์การทับซ้อน
                             const overlapX1 = Math.max(x1, yoloX1);
                             const overlapY1 = Math.max(y1, yoloY1);
                             const overlapX2 = Math.min(x2, yoloX2);
                             const overlapY2 = Math.min(y2, yoloY2);
-                            
+
                             const overlapArea = (overlapX2 - overlapX1) * (overlapY2 - overlapY1);
                             const irrelevantArea = (x2 - x1) * (y2 - y1);
-                            
+
                             // ถ้าทับซ้อนมากกว่า 10% ของพื้นที่ irrelevant object ถือว่าทับซ้อน
                             const overlapPercentage = overlapArea / irrelevantArea;
                             if (overlapPercentage > 0.1) {
@@ -1499,7 +1494,7 @@
                             }
                         }
                     }
-                    
+
                     // วาดกรอบเฉพาะถ้าไม่ทับซ้อนกับกรอบ YOLO
                     if (!isOverlappingWithYolo) {
                         // ปรับขนาดพิกัดตามสัดส่วน canvas ที่แสดงจริง
@@ -1529,13 +1524,49 @@
                         // วาดข้อความ
                         canvasCtx.fillStyle = 'white';
                         canvasCtx.fillText(label, scaledX1 + 5, scaledY1 - 3);
-                        
+
                         drawnIrrelevantCount++;
                         console.log(`✅ Drew irrelevant object #${index + 1} at [${x1.toFixed(0)}, ${y1.toFixed(0)}, ${x2.toFixed(0)}, ${y2.toFixed(0)}]`);
                     }
                 });
 
                 console.log(`🔍 Drew ${drawnIrrelevantCount} out of ${irrelevantObjects.length} irrelevant object boxes (filtered out overlapping with YOLO)`);
+            }
+        }
+
+        // ✅ ฟังก์ชันอัปเดตสถานะการตรวจจับ
+        function updateDetectionStatus(status, frameCount = 0) {
+            const progressIndicator = document.getElementById('detection-progress-indicator');
+            const idleIndicator = document.getElementById('detection-idle-indicator');
+            const completeIndicator = document.getElementById('detection-complete-indicator');
+            const frameCounter = document.getElementById('frame-counter');
+
+            // ซ่อนทุก indicator ก่อน
+            progressIndicator.classList.add('hidden');
+            idleIndicator.classList.add('hidden');
+            completeIndicator.classList.add('hidden');
+
+            switch (status) {
+                case 'idle':
+                    idleIndicator.classList.remove('hidden');
+                    break;
+                case 'detecting':
+                    progressIndicator.classList.remove('hidden');
+                    if (frameCounter && frameCount >= 0) {
+                        frameCounter.textContent = `${frameCount}/4 เฟรม`;
+                        // เปลี่ยนสีตามความคืบหน้า
+                        if (frameCount >= 3) {
+                            frameCounter.className = 'text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full';
+                        } else if (frameCount >= 2) {
+                            frameCounter.className = 'text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full';
+                        } else {
+                            frameCounter.className = 'text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full';
+                        }
+                    }
+                    break;
+                case 'complete':
+                    completeIndicator.classList.remove('hidden');
+                    break;
             }
         }
     </script>
@@ -1586,12 +1617,27 @@
                     </div>
                 </div>
                 <div class="flex flex-wrap justify-center space-x-2 lg:space-x-4 mb-4">
-                    <!-- Confidence Threshold Control -->
-                    <div class="flex items-center space-x-2 bg-gray-200 px-2 py-1 lg:px-3 lg:py-2 rounded-md">
-                        <label for="confidence-threshold" class="text-xs lg:text-sm font-medium">🎯 Confidence:</label>
-                        <input type="range" id="confidence-threshold" min="0.1" max="1.0" step="0.05" value="0.7"
-                            class="w-16 lg:w-20 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer">
-                        <span id="confidence-value" class="text-xs lg:text-sm font-bold">0.7</span>
+                    <!-- Detection Status Display -->
+                    <div id="detection-status-display"
+                        class="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-md border min-w-0 flex-grow justify-center">
+                        <div id="detection-progress-indicator" class="hidden">
+                            <div class="flex items-center space-x-2">
+                                <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                                <span class="text-sm font-medium text-blue-600">กำลังตรวจจับ...</span>
+                                <span id="frame-counter"
+                                    class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">0/4 เฟรม</span>
+                            </div>
+                        </div>
+                        <div id="detection-idle-indicator" class="flex items-center space-x-2">
+                            <div class="h-3 w-3 bg-gray-400 rounded-full"></div>
+                            <span class="text-sm font-medium text-gray-600">พร้อมตรวจจับ</span>
+                        </div>
+                        <div id="detection-complete-indicator" class="hidden">
+                            <div class="flex items-center space-x-2">
+                                <div class="h-3 w-3 bg-green-500 rounded-full"></div>
+                                <span class="text-sm font-medium text-green-600">ตรวจจับครบ 4 เฟรม - ล็อคผลลัพธ์</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="camera-controls flex flex-wrap justify-center space-x-2 lg:space-x-4 mb-4">
@@ -1717,11 +1763,10 @@
                 // ซ่อน loading spinner เมื่อ stream โหลดเสร็จ
                 cameraStreamImg.onload = () => {
                     document.getElementById('camera-loading-spinner').style.display = 'none';
-                };
-
-                console.log('✅ เปิดกล้องสำเร็จ');
+                }; console.log('✅ เปิดกล้องสำเร็จ');
                 document.getElementById('detect-status').textContent = 'กล้องพร้อมใช้งาน';
                 document.getElementById('detect-status').className = 'detect-status success';
+                updateDetectionStatus('idle');
 
             } catch (error) {
                 console.error('❌ เกิดข้อผิดพลาดในการเปิดกล้อง:', error.message);
@@ -2039,15 +2084,8 @@
             }
         });
 
-        // ✅ Event Listener สำหรับ Confidence Threshold Slider
-        const confidenceSlider = document.getElementById('confidence-threshold');
-        const confidenceValue = document.getElementById('confidence-value');
-
-        confidenceSlider.addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value).toFixed(1);
-            confidenceValue.textContent = value;
-            console.log(`🎯 Confidence threshold updated to: ${value}`);
-        });
+        // ✅ เริ่มต้นแสดงสถานะ idle
+        updateDetectionStatus('idle');
     </script>
 </body>
 
