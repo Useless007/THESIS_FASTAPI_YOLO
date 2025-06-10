@@ -862,6 +862,83 @@ async def detect_objects(
         raise HTTPException(status_code=500, detail="Unexpected server error during detection process.")
 
 
+# ✅ ฟังก์ชันตรวจจับสิ่งแปลกปลอมด้วย OpenCV
+def detect_irrelevant_objects(frame, yolo_detections):
+    """
+    ใช้ OpenCV เพื่อตรวจจับสิ่งแปลกปลอมที่ไม่ใช่สินค้าที่เทรนไว้
+    โดยใช้เทคนิค background subtraction และ contour detection
+    """
+    irrelevant_objects = []
+    
+    try:
+        # แปลงเป็น grayscale
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # ใช้ Gaussian Blur เพื่อลด noise
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # ใช้ adaptive threshold เพื่อแยกวัตถุออกจากพื้นหลัง
+        thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+        
+        # หา contours
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # สร้างรายการพื้นที่ที่ YOLO ตรวจพบแล้ว
+        yolo_areas = []
+        for detection in yolo_detections:
+            x1, y1, x2, y2 = detection["box"]
+            yolo_areas.append((int(x1), int(y1), int(x2), int(y2)))
+        
+        # วิเคราะห์ contours
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            
+            # กรองเฉพาะวัตถุที่มีขนาดเหมาะสม (ไม่เล็กเกินไปหรือใหญ่เกินไป)
+            if 500 < area < 50000:  # ปรับค่าตามความเหมาะสม
+                # หา bounding box ของ contour
+                x, y, w, h = cv2.boundingRect(contour)
+                
+                # ตรวจสอบ aspect ratio เพื่อกรองรูปร่างที่เป็นไปได้ของสินค้า
+                aspect_ratio = w / h
+                if 0.3 < aspect_ratio < 3.0:  # กรองรูปร่างที่สมเหตุสมผล
+                    
+                    # ตรวจสอบว่าพื้นที่นี้ทับซ้อนกับที่ YOLO ตรวจพบหรือไม่
+                    is_overlapping = False
+                    for yolo_x1, yolo_y1, yolo_x2, yolo_y2 in yolo_areas:
+                        # คำนวณ IoU (Intersection over Union)
+                        overlap_x1 = max(x, yolo_x1)
+                        overlap_y1 = max(y, yolo_y1)
+                        overlap_x2 = min(x + w, yolo_x2)
+                        overlap_y2 = min(y + h, yolo_y2)
+                        
+                        if overlap_x1 < overlap_x2 and overlap_y1 < overlap_y2:
+                            overlap_area = (overlap_x2 - overlap_x1) * (overlap_y2 - overlap_y1)
+                            contour_area = w * h
+                            yolo_area = (yolo_x2 - yolo_x1) * (yolo_y2 - yolo_y1)
+                            
+                            # ถ้าทับซ้อนมากกว่า 30% ถือว่าเป็นวัตถุเดียวกัน
+                            iou = overlap_area / (contour_area + yolo_area - overlap_area)
+                            if iou > 0.3:
+                                is_overlapping = True
+                                break
+                    
+                    # ถ้าไม่ทับซ้อนกับที่ YOLO ตรวจพบ แสดงว่าเป็นสิ่งแปลกปลอม
+                    if not is_overlapping:
+                        irrelevant_objects.append({
+                            "label": "unknown_object",
+                            "confidence": 0.8,  # กำหนดค่า confidence คงที่
+                            "box": [float(x), float(y), float(x + w), float(y + h)],
+                            "area": float(area),
+                            "method": "opencv_contour"
+                        })
+        
+        print(f"🔍 OpenCV detected {len(irrelevant_objects)} irrelevant objects")
+        return irrelevant_objects
+        
+    except Exception as e:
+        print(f"❌ Error in detect_irrelevant_objects: {str(e)}")
+        return []
+
 # ✅ Route: ตรวจจับสินค้าจากกล้องโดยตรง
 @router.post("/detect-from-camera", response_class=JSONResponse)
 async def detect_from_camera(
@@ -871,6 +948,7 @@ async def detect_from_camera(
 ):
     """
     ตรวจจับวัตถุจากกล้องโดยตรง ส่งกลับพิกัดกรอบและการจำแนกว่าเป็นสินค้าในออเดอร์หรือไม่
+    รวมถึงการตรวจจับสิ่งแปลกปลอมด้วย OpenCV
     """
     global video_captures
     
@@ -907,19 +985,22 @@ async def detect_from_camera(
         
         # ตรวจจับด้วย YOLO
         device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-        results = model.predict(source=temp_image_path, conf=0.3, iou=0.45, stream=False, device=device)
+        results = model.predict(source=temp_image_path, conf=0.7, iou=0.45, stream=False, device=device)
         
         detections = []
         for result in results:
             for box in result.boxes.data:
                 x1, y1, x2, y2, conf, cls = box.tolist()
-                if conf > 0.3:
+                if conf > 0.7:
                     label = model.names[int(cls)]
                     detections.append({
                         "label": label,
                         "confidence": float(conf),
                         "box": [float(x1), float(y1), float(x2), float(y2)],
                     })
+        
+        # ✅ ตรวจจับสิ่งแปลกปลอมด้วย OpenCV
+        irrelevant_objects = detect_irrelevant_objects(frame, detections)
         
         # จำแนกว่าสินค้าไหนอยู่ในออเดอร์
         in_order_items = []
@@ -944,6 +1025,7 @@ async def detect_from_camera(
         return JSONResponse(content={
             "detections": detections,
             "in_order_items": in_order_items,
+            "irrelevant_objects": irrelevant_objects,  # ✅ เพิ่มสิ่งแปลกปลอม
             "order_products": order_product_names,
             "camera_id": request.camera_id,
             "order_id": request.order_id

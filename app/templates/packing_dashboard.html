@@ -1240,6 +1240,11 @@
 
             console.log(`📊 Detection Results stats: Total: ${result.detections.length}, High confidence (>${confidenceThreshold}): ${filteredDetections.length}`);
 
+            // ✅ Log irrelevant objects
+            if (result.irrelevant_objects && result.irrelevant_objects.length > 0) {
+                console.log(`🔍 Found ${result.irrelevant_objects.length} irrelevant objects via OpenCV`);
+            }
+
             // ตรวจสอบว่ามีวัตถุที่ผ่านเกณฑ์ confidence หรือไม่
             if (filteredDetections.length === 0) {
                 detectionList.innerHTML = `<div class="detection-item text-gray-500">ไม่พบวัตถุที่มีความเชื่อมั่น > ${(confidenceThreshold * 100).toFixed(0)}%</div>`;
@@ -1297,8 +1302,8 @@
             // แสดงผลรายการสินค้าที่ล็อคตำแหน่ง
             displayOrderItemsList(orderItems, extraItems);
 
-            // วาดกรอบบน canvas
-            drawDetectionBoxes(filteredDetections, result.in_order_items || []);
+            // ✅ วาดกรอบบน canvas รวมทั้ง irrelevant objects
+            drawDetectionBoxes(filteredDetections, result.in_order_items || [], result.irrelevant_objects || []);
 
             // ตรวจสอบการจับคู่กับออเดอร์
             checkOrderItemsMatch(counts);
@@ -1340,9 +1345,7 @@
             }
 
             return true; // ครบแล้ว
-        }
-
-        // ✅ ฟังก์ชันแสดงรายการสินค้าที่ล็อคตำแหน่ง
+        }        // ✅ ฟังก์ชันแสดงรายการสินค้าที่ล็อคตำแหน่ง
         function displayOrderItemsList(orderItems, extraItems) {
             const detectionList = document.getElementById('detection-list');
             detectionList.innerHTML = '';
@@ -1358,11 +1361,27 @@
                 detectionList.appendChild(item);
             });
 
+            // ✅ แสดงสิ่งแปลกปลอมที่ตรวจพบด้วย OpenCV (ถ้ามี)
+            if (lockedDetectionResults && lockedDetectionResults.irrelevant_objects && lockedDetectionResults.irrelevant_objects.length > 0) {
+                const divider = document.createElement('div');
+                divider.className = 'detection-item border-t border-gray-300 pt-2 mt-2';
+                divider.innerHTML = '<span class="text-gray-600 text-sm">สิ่งแปลกปลอมที่ตรวจพบ:</span>';
+                detectionList.appendChild(divider);
+
+                lockedDetectionResults.irrelevant_objects.forEach((obj, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'detection-item';
+                    item.innerHTML = `
+                        <span class="font-bold text-orange-600">❓ Unknown Object #${index + 1}</span> 
+                        <span class="text-orange-500">${(obj.confidence * 100).toFixed(1)}%</span>
+                    `;
+                    detectionList.appendChild(item);
+                });
+            }
+
             // แสดงสินค้าเกิน (ถ้ามี) - ไม่แสดงในรายการหลัก
             // สินค้าเกินจะแสดงในส่วน verification status แทน
-        }
-
-        // ✅ ฟังก์ชันแสดงผลข้อมูลที่ล็อคไว้
+        }// ✅ ฟังก์ชันแสดงผลข้อมูลที่ล็อคไว้
         function displayLockedResults() {
             const detectionList = document.getElementById('detection-list');
             detectionList.innerHTML = '';
@@ -1382,10 +1401,11 @@
             if (lockedDetectionResults) {
                 const confidenceThreshold = parseFloat(document.getElementById('confidence-threshold').value);
                 const filteredDetections = lockedDetectionResults.detections.filter(detection => detection.confidence > confidenceThreshold);
-                drawDetectionBoxes(filteredDetections, lockedDetectionResults.in_order_items || []);
+                // ✅ ส่ง irrelevant_objects ด้วยเมื่อวาดกรอบ
+                drawDetectionBoxes(filteredDetections, lockedDetectionResults.in_order_items || [], lockedDetectionResults.irrelevant_objects || []);
             }
         }// ✅ ฟังก์ชันวาดกรอบการตรวจจับ
-        function drawDetectionBoxes(detections, inOrderItems) {
+        function drawDetectionBoxes(detections, inOrderItems, irrelevantObjects = []) {
             const cameraStreamImg = document.getElementById('camera-stream');
             const detectionCanvas = document.getElementById('detection-canvas');
             const canvasCtx = detectionCanvas.getContext('2d');
@@ -1410,8 +1430,9 @@
             const scaleY = displayedHeight / imgHeight;
 
             // ข้อมูลที่ส่งเข้ามาผ่านการกรองด้วย confidence threshold แล้ว
-            console.log(`📊 Drawing ${detections.length} filtered detections on canvas (${displayedWidth}x${displayedHeight})`);
+            console.log(`📊 Drawing ${detections.length} YOLO detections and ${irrelevantObjects.length} irrelevant objects on canvas (${displayedWidth}x${displayedHeight})`);
 
+            // วาดกรอบสำหรับ YOLO detections
             detections.forEach(detection => {
                 const [x1, y1, x2, y2] = detection.box;
 
@@ -1441,8 +1462,81 @@
                 canvasCtx.fillRect(scaledX1, scaledY1 - textHeight, textMetrics.width + 10, textHeight);
 
                 // วาดข้อความ
-                canvasCtx.fillStyle = '#000000'; canvasCtx.fillText(label, scaledX1 + 5, scaledY1 - 5);
-            });
+                canvasCtx.fillStyle = '#000000';
+                canvasCtx.fillText(label, scaledX1 + 5, scaledY1 - 5);
+            });            // ✅ วาดกรอบสำหรับ irrelevant objects (สิ่งแปลกปลอม) - เฉพาะในพื้นที่ที่ไม่มีกรอบ YOLO
+            if (irrelevantObjects && irrelevantObjects.length > 0) {
+                let drawnIrrelevantCount = 0;
+                
+                irrelevantObjects.forEach((obj, index) => {
+                    const [x1, y1, x2, y2] = obj.box;
+
+                    // ตรวจสอบว่ากรอบ irrelevant object ทับซ้อนกับกรอบ YOLO หรือไม่ (เข้มงวดขึ้น)
+                    let isOverlappingWithYolo = false;
+                    
+                    for (const detection of detections) {
+                        const [yoloX1, yoloY1, yoloX2, yoloY2] = detection.box;
+                        
+                        // ตรวจสอบการทับซ้อนแบบง่าย - ถ้ามีการทับซ้อนเลยแม้นิดเดียว
+                        const isOverlapping = !(x2 < yoloX1 || x1 > yoloX2 || y2 < yoloY1 || y1 > yoloY2);
+                        
+                        if (isOverlapping) {
+                            // คำนวณเปอร์เซ็นต์การทับซ้อน
+                            const overlapX1 = Math.max(x1, yoloX1);
+                            const overlapY1 = Math.max(y1, yoloY1);
+                            const overlapX2 = Math.min(x2, yoloX2);
+                            const overlapY2 = Math.min(y2, yoloY2);
+                            
+                            const overlapArea = (overlapX2 - overlapX1) * (overlapY2 - overlapY1);
+                            const irrelevantArea = (x2 - x1) * (y2 - y1);
+                            
+                            // ถ้าทับซ้อนมากกว่า 10% ของพื้นที่ irrelevant object ถือว่าทับซ้อน
+                            const overlapPercentage = overlapArea / irrelevantArea;
+                            if (overlapPercentage > 0.1) {
+                                isOverlappingWithYolo = true;
+                                console.log(`🚫 Skipping irrelevant object #${index + 1} - overlaps ${(overlapPercentage * 100).toFixed(1)}% with YOLO detection: ${detection.label}`);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // วาดกรอบเฉพาะถ้าไม่ทับซ้อนกับกรอบ YOLO
+                    if (!isOverlappingWithYolo) {
+                        // ปรับขนาดพิกัดตามสัดส่วน canvas ที่แสดงจริง
+                        const scaledX1 = x1 * scaleX;
+                        const scaledY1 = y1 * scaleY;
+                        const scaledX2 = x2 * scaleX;
+                        const scaledY2 = y2 * scaleY;
+
+                        // ใช้สีส้มสำหรับสิ่งแปลกปลอม
+                        canvasCtx.strokeStyle = '#ff8c00'; // สีส้ม
+                        canvasCtx.lineWidth = 2;
+                        canvasCtx.setLineDash([5, 5]); // เส้นประ
+                        canvasCtx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
+
+                        // รีเซ็ตเส้นประกลับเป็นเส้นทึบ
+                        canvasCtx.setLineDash([]);
+
+                        // วาดพื้นหลังสำหรับข้อความ
+                        const label = `Unknown Object`;
+                        canvasCtx.font = '12px Arial';
+                        const textWidth = canvasCtx.measureText(label).width;
+                        const textHeight = 18;
+
+                        canvasCtx.fillStyle = 'rgba(255, 140, 0, 0.8)'; // สีส้มอ่อน
+                        canvasCtx.fillRect(scaledX1, scaledY1 - textHeight, textWidth + 10, textHeight);
+
+                        // วาดข้อความ
+                        canvasCtx.fillStyle = 'white';
+                        canvasCtx.fillText(label, scaledX1 + 5, scaledY1 - 3);
+                        
+                        drawnIrrelevantCount++;
+                        console.log(`✅ Drew irrelevant object #${index + 1} at [${x1.toFixed(0)}, ${y1.toFixed(0)}, ${x2.toFixed(0)}, ${y2.toFixed(0)}]`);
+                    }
+                });
+
+                console.log(`🔍 Drew ${drawnIrrelevantCount} out of ${irrelevantObjects.length} irrelevant object boxes (filtered out overlapping with YOLO)`);
+            }
         }
     </script>
 </head>
