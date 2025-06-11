@@ -395,7 +395,7 @@
     <script>
         // ✅ ตัวแปรสำหรับระบบหยุดอัตโนมัติและล็อคตำแหน่ง
         let consecutiveMatchFrames = 0;
-        let autoStopThreshold = 4; // จำนวนเฟรมที่ต้องตรงกันก่อนหยุดอัตโนมัติ
+        let autoStopThreshold = 5; // จำนวนเฟรมที่ต้องตรงกันก่อนหยุดอัตโนมัติ
         let isAutoStopped = false;
         let lockedDetectionResults = null; // เก็บผลการตรวจจับที่ล็อคไว้
         let lockedOrderItems = {}; // เก็บรายการสินค้าในออเดอร์ที่ล็อคไว้
@@ -1553,7 +1553,7 @@
                 case 'detecting':
                     progressIndicator.classList.remove('hidden');
                     if (frameCounter && frameCount >= 0) {
-                        frameCounter.textContent = `${frameCount}/4 เฟรม`;
+                        frameCounter.textContent = `${frameCount}/5 เฟรม`;
                         // เปลี่ยนสีตามความคืบหน้า
                         if (frameCount >= 3) {
                             frameCounter.className = 'text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full';
@@ -1625,7 +1625,7 @@
                                 <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
                                 <span class="text-sm font-medium text-blue-600">กำลังตรวจจับ...</span>
                                 <span id="frame-counter"
-                                    class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">0/4 เฟรม</span>
+                                    class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">0/5 เฟรม</span>
                             </div>
                         </div>
                         <div id="detection-idle-indicator" class="flex items-center space-x-2">
@@ -1635,7 +1635,7 @@
                         <div id="detection-complete-indicator" class="hidden">
                             <div class="flex items-center space-x-2">
                                 <div class="h-3 w-3 bg-green-500 rounded-full"></div>
-                                <span class="text-sm font-medium text-green-600">ตรวจจับครบ 4 เฟรม - ล็อคผลลัพธ์</span>
+                                <span class="text-sm font-medium text-green-600">ตรวจจับครบ 5 เฟรม - ล็อคผลลัพธ์</span>
                             </div>
                         </div>
                     </div>
