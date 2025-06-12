@@ -1670,3 +1670,150 @@ async def get_realtime_webcam_page(
     แสดงหน้า UI สำหรับการตรวจจับสินค้าแบบ real-time จากเว็บแคม
     """
     return templates.TemplateResponse("realtime_detection.html", {"request": request, "current_user": current_user})
+
+# ✅ ฟังก์ชันสำหรับสร้างภาพที่มีกรอบสินค้า
+def create_annotated_image(original_image, detections, in_order_items):
+    """
+    สร้างภาพที่มีกรอบสินค้าจากข้อมูล detection
+    แสดงเฉพาะกรอบสินค้าที่อยู่ในออเดอร์ (ไม่แสดง unknown objects)
+    """
+    try:
+        # คัดลอกภาพต้นฉบับ
+        annotated_img = original_image.copy()
+        img_height, img_width = annotated_img.shape[:2]
+        
+        # วาดกรอบเฉพาะสินค้าในออเดอร์
+        for detection in detections:
+            label = detection.get("label", "")
+            confidence = detection.get("confidence", 0)
+            box = detection.get("box", [])
+            
+            # ตรวจสอบว่าเป็นสินค้าในออเดอร์หรือไม่
+            if label in in_order_items and len(box) == 4:
+                x1, y1, x2, y2 = box
+                
+                # แปลงเป็น integer และตรวจสอบขอบเขต
+                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                x1 = max(0, min(x1, img_width))
+                y1 = max(0, min(y1, img_height))
+                x2 = max(0, min(x2, img_width))
+                y2 = max(0, min(y2, img_height))
+                
+                
+                # วาดกรอบสีเขียว
+                cv2.rectangle(annotated_img, (x1, y1), (x2, y2), (0, 255, 0), 3)
+                
+                # เตรียมข้อความ label
+                label_text = f"{label}: {confidence:.2f}"
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 0.7
+                thickness = 2
+                
+                # คำนวณขนาดข้อความ
+                (text_width, text_height), baseline = cv2.getTextSize(
+                    label_text, font, font_scale, thickness
+                )
+                
+                # วาดพื้นหลังสีเขียวสำหรับข้อความ
+                text_x = x1
+                text_y = y1 - 10
+                if text_y < 0:
+                    text_y = y1 + text_height + 10
+                
+                cv2.rectangle(
+                    annotated_img,
+                    (text_x, text_y - text_height - baseline),
+                    (text_x + text_width, text_y + baseline),
+                    (0, 255, 0), -1
+                )
+                
+                # วาดข้อความสีขาว
+                cv2.putText(
+                    annotated_img, label_text,
+                    (text_x, text_y - baseline),
+                    font, font_scale, (255, 255, 255), thickness
+                )
+        
+        return annotated_img
+        
+    except Exception as e:
+        print(f"❌ Error in create_annotated_image: {str(e)}")
+        return original_image
+
+# ✅ Endpoint สำหรับสร้างภาพที่มีกรอบสินค้า
+@router.post("/create-annotated-image", response_class=JSONResponse)
+async def create_annotated_image_endpoint(
+    request: Request,
+    camera_id: int = Form(...),
+    order_id: int = Form(...),
+    detections_json: str = Form(...),
+    in_order_items_json: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 4))
+):
+    """
+    รับข้อมูล detection จาก frontend และสร้างภาพที่มีกรอบสินค้า
+    ใช้แทนการ capture จาก canvas ที่มีปัญหา CORS
+    """
+    try:
+        # แปลง JSON string เป็น Python objects
+        detections = json.loads(detections_json)
+        in_order_items = json.loads(in_order_items_json)
+        
+        print(f"🎯 Creating annotated image for order {order_id} from camera {camera_id}")
+        print(f"📊 Received {len(detections)} detections, {len(in_order_items)} in-order items")
+        
+        # ตรวจสอบกล้อง
+        camera = db.query(Camera).filter(Camera.id == camera_id).first()
+        if not camera:
+            raise HTTPException(status_code=404, detail="Camera not found")
+        
+        # ตรวจสอบออเดอร์
+        order = db.query(Order).filter(Order.order_id == order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        # ดึงภาพล่าสุดจากกล้อง
+        if camera_id in video_captures and video_captures[camera_id].isOpened():
+            success, frame = video_captures[camera_id].read()
+            if not success:
+                raise HTTPException(status_code=500, detail="Failed to capture frame from camera")
+        else:
+            raise HTTPException(status_code=500, detail="Camera not available")
+        
+        # สร้างภาพที่มีกรอบสินค้า
+        annotated_image = create_annotated_image(frame, detections, in_order_items)
+        
+        # บันทึกภาพ
+        upload_dir = "uploads/packed_orders"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        timestamp = int(time.time())
+        file_path = os.path.join(upload_dir, f"{order_id}_annotated_{timestamp}.jpg")
+        
+        # บันทึกภาพที่มีกรอบ
+        cv2.imwrite(file_path, annotated_image)
+        
+        # อัปเดตข้อมูลในออเดอร์
+        order.image_path = file_path.replace("\\", "/")
+        order.camera_id = camera_id
+        db.commit()
+        
+        print(f"✅ Created annotated image: {file_path}")
+        
+        return JSONResponse(content={
+            "message": "Annotated image created successfully",
+            "image_path": file_path.replace("\\", "/"),
+            "order_id": order_id,
+            "camera_id": camera_id,
+            "detections_count": len(detections),
+            "in_order_items_count": len(in_order_items)
+        })
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON decode error: {str(e)}")
+        raise HTTPException(status_code=400, detail="Invalid JSON format")
+    except Exception as e:
+        print(f"❌ Error creating annotated image: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to create annotated image: {str(e)}")
