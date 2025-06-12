@@ -3,6 +3,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker,declarative_base
 from .config import settings
+import mysql.connector
 
 # SQLAlchemy database URL สำหรับ MySQL
 SQLALCHEMY_DATABASE_URL = (
@@ -24,3 +25,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# ฟังก์ชันสำหรับการเชื่อมต่อ MySQL แบบ direct connection
+def get_db_connection():
+    """
+    สร้างการเชื่อมต่อ MySQL แบบ direct สำหรับการทำงานกับ raw SQL
+    """
+    return mysql.connector.connect(
+        host=settings.DATABASE_HOST,
+        port=settings.DATABASE_PORT,
+        user=settings.DATABASE_USERNAME,
+        password=settings.DATABASE_PASSWORD,
+        database=settings.DATABASE_NAME
+    )

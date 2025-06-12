@@ -9,6 +9,7 @@ from app.models.camera import Camera
 from app.models.product import Product
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.order_status_log import OrderStatusLog
 
 # Export all models
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "Camera",
     "Product",
     "Order",
-    "OrderItem"
+    "OrderItem",
+    "OrderStatusLog"
 ]

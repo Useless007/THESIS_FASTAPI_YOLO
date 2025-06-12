@@ -18,12 +18,12 @@ class Order(Base):
     camera_id = Column(Integer, ForeignKey("tb_cameras.id"), nullable=True)
     is_verified = Column(Boolean, default=False, nullable=False)
     image_path = Column(String(255), nullable=True)
-    
-    # ความสัมพันธ์กับตารางอื่น
+      # ความสัมพันธ์กับตารางอื่น
     customer = relationship("Customer", foreign_keys=[customer_id], back_populates="orders")
     assigned_user = relationship("User", foreign_keys=[assigned_to], back_populates="assigned_orders")
     camera = relationship("Camera", back_populates="orders")
     order_items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    status_logs = relationship("OrderStatusLog", back_populates="order", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Order(order_id={self.order_id}, customer_id={self.customer_id})>"

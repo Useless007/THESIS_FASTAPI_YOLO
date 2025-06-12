@@ -776,3 +776,162 @@ def get_customer_management(
     """
     print(f"🛡️ Customer Management Access by: {current_user.email}")
     return templates.TemplateResponse("admin_customers.html", {"request": request, "current_user": current_user})
+
+# Route สำหรับแสดงหน้าจัดการออเดอร์ที่เสร็จแล้ว (เพื่อย้อนกลับสถานะ)
+@router.get("/order-revert", response_class=HTMLResponse)
+def get_order_revert_management(
+    request: Request,
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    แสดงหน้าจัดการการย้อนกลับสถานะออเดอร์
+    """
+    print(f"🛡️ Order Revert Management Access by: {current_user.email}")
+    return templates.TemplateResponse("admin_order_revert.html", {"request": request, "current_user": current_user})
+
+# Route สำหรับดึงข้อมูลออเดอร์ที่สถานะเป็น completed
+@router.get("/completed-orders", response_class=JSONResponse)
+def get_completed_orders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ดึงข้อมูลออเดอร์ที่มีสถานะ completed เพื่อแสดงในหน้าจัดการ
+    """
+    from app.models.customer import Customer
+    from app.models.account import Account
+    
+    # ดึงข้อมูลออเดอร์ที่สถานะเป็น completed
+    orders = (
+        db.query(Order)
+        .filter(Order.status == 'completed')
+        .order_by(Order.updated_at.desc())
+        .limit(50)
+        .all()
+    )
+    
+    result = []
+    for order in orders:
+        # ดึงข้อมูลลูกค้า
+        customer = db.query(Customer).filter(Customer.id == order.customer_id).first()
+        customer_name = "Unknown"
+        if customer:
+            customer_account = db.query(Account).filter(Account.id == customer.account_id).first()
+            customer_name = customer_account.name if customer_account else "Unknown"
+        
+        # ดึงข้อมูลพนักงานที่รับผิดชอบ
+        assigned_name = "ไม่ได้กำหนด"
+        if order.assigned_to:
+            assigned_user = db.query(User).filter(User.id == order.assigned_to).first()
+            if assigned_user:
+                assigned_account = db.query(Account).filter(Account.id == assigned_user.account_id).first()
+                assigned_name = assigned_account.name if assigned_account else "Unknown"
+        
+        result.append({
+            "order_id": order.order_id,
+            "customer_name": customer_name,
+            "total": order.total,
+            "created_at": order.created_at.isoformat() if order.created_at else None,
+            "updated_at": order.updated_at.isoformat() if order.updated_at else None,
+            "assigned_name": assigned_name,
+            "image_path": order.image_path
+        })
+    
+    return result
+
+# Route สำหรับย้อนกลับสถานะออเดอร์
+@router.post("/revert-order-status")
+def revert_order_status(
+    request_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ย้อนกลับสถานะออเดอร์จาก completed เป็น packing
+    """
+    from app.schemas.order_status_log import OrderStatusRevertRequest, OrderStatusLogCreate
+    from app.crud.order_status_log import create_order_status_log
+    
+    order_id = request_data.get("order_id")
+    reason = request_data.get("reason", "").strip()
+    
+    if not order_id:
+        raise HTTPException(status_code=400, detail="❌ ไม่ได้ระบุ order_id")
+    
+    if not reason:
+        raise HTTPException(status_code=400, detail="❌ กรุณาระบุเหตุผลในการย้อนกลับสถานะ")
+    
+    # ตรวจสอบออเดอร์
+    order = db.query(Order).filter(Order.order_id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="❌ ไม่พบออเดอร์")
+    
+    if order.status != "completed":
+        raise HTTPException(status_code=400, detail="❌ ออเดอร์นี้ไม่ได้มีสถานะ completed")
+    
+    try:
+        # สร้าง log การเปลี่ยนสถานะ
+        log_data = OrderStatusLogCreate(
+            order_id=order_id,
+            old_status="completed",
+            new_status="packing",
+            reason=reason,
+            changed_by=current_user.id
+        )
+        
+        create_order_status_log(db, log_data)
+        
+        # อัปเดตสถานะออเดอร์
+        order.status = "packing"
+        order.updated_at = datetime.utcnow()
+        db.commit()
+        
+        return {
+            "message": f"✅ ย้อนกลับสถานะออเดอร์ #{order_id} จาก completed เป็น packing สำเร็จ",
+            "order_id": order_id,
+            "new_status": "packing",
+            "reason": reason
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"❌ เกิดข้อผิดพลาด: {str(e)}")
+
+# Route สำหรับดูประวัติการเปลี่ยนสถานะ
+@router.get("/order-status-logs/{order_id}")
+def get_order_status_logs(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ดูประวัติการเปลี่ยนสถานะของออเดอร์
+    """
+    from app.crud.order_status_log import get_order_status_logs_with_user_info
+    
+    try:
+        logs = get_order_status_logs_with_user_info(db, order_id)
+        return logs
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"❌ เกิดข้อผิดพลาด: {str(e)}")
+
+# Route สำหรับดูประวัติการเปลี่ยนสถานะทั้งหมด
+@router.get("/all-status-logs")
+def get_all_status_logs(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ดูประวัติการเปลี่ยนสถานะทั้งหมด
+    """
+    from app.crud.order_status_log import get_recent_status_changes
+    
+    try:
+        logs = get_recent_status_changes(db, limit)
+        return logs
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"❌ เกิดข้อผิดพลาด: {str(e)}")

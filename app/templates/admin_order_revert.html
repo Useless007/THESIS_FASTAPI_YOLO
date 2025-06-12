@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>ย้อนกลับสถานะออเดอร์ - Admin Dashboard</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+</head>
+
+<body class="bg-gray-100">
+    <nav class="bg-white shadow-md p-4">
+        <div class="max-w-screen-xl mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold">🔄 ย้อนกลับสถานะออเดอร์</h1>
+            <div class="flex space-x-4">
+                <a href="/admin/dashboard" class="text-blue-500 hover:underline">กลับไปแดชบอร์ด</a>
+                <a href="/" class="text-blue-500 hover:underline">หน้าแรก</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="p-8">
+        <div class="mx-auto max-w-7xl">
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold mb-2">📋 ออเดอร์ที่เสร็จสิ้นแล้ว</h2>
+                <p class="text-gray-600">สามารถย้อนกลับสถานะจาก "completed" เป็น "packing" ได้</p>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loading" class="text-center py-8">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                <p class="mt-2 text-gray-600">กำลังโหลดข้อมูล...</p>
+            </div>
+
+            <!-- Orders Table -->
+            <div id="orders-container" class="hidden">
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Order ID
+                                </th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    ลูกค้า
+                                </th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    ยอดรวม
+                                </th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    พนักงานที่รับผิดชอบ
+                                </th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    วันที่อัปเดต
+                                </th>
+                                <th
+                                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    การดำเนินการ
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-tbody" class="bg-white divide-y divide-gray-200">
+                            <!-- Orders will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- No Orders Message -->
+            <div id="no-orders" class="hidden text-center py-8">
+                <div class="text-gray-500">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2M4 13h2m13-4h-2M7 9h2m0 0V7a2 2 0 012-2h6a2 2 0 012 2v2M9 9h6">
+                        </path>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">ไม่มีออเดอร์ที่เสร็จสิ้น</h3>
+                    <p class="mt-1 text-sm text-gray-500">ยังไม่มีออเดอร์ที่มีสถานะ completed</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Revert Confirmation -->
+    <div id="revert-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div class="mt-3 text-center">
+                <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100">
+                    <svg class="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.96-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z">
+                        </path>
+                    </svg>
+                </div>
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mt-4">ยืนยันการย้อนกลับสถานะ</h3>
+                <div class="mt-4 text-left">
+                    <p class="text-sm text-gray-500 mb-3">
+                        คุณต้องการย้อนกลับสถานะออเดอร์ <span id="modal-order-id" class="font-bold"></span> จาก
+                        "completed" เป็น "packing" หรือไม่?
+                    </p>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        เหตุผลในการย้อนกลับ: <span class="text-red-500">*</span>
+                    </label>
+                    <textarea id="revert-reason" rows="4"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="กรุณาระบุเหตุผลที่ต้องย้อนกลับสถานะ..." required></textarea>
+                </div>
+                <div class="flex justify-center space-x-3 mt-6">
+                    <button id="confirm-revert"
+                        class="px-4 py-2 bg-yellow-500 text-white text-base font-medium rounded-md shadow-sm hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                        disabled>
+                        ยืนยันย้อนกลับ
+                    </button>
+                    <button id="cancel-revert"
+                        class="px-4 py-2 bg-gray-300 text-gray-700 text-base font-medium rounded-md shadow-sm hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300">
+                        ยกเลิก
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Status Logs -->
+    <div id="logs-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+        <div class="relative top-10 mx-auto p-5 border w-3/4 max-w-4xl shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900">ประวัติการเปลี่ยนสถานะ</h3>
+                    <button id="close-logs-modal" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="logs-content" class="max-h-96 overflow-y-auto">
+                    <!-- Logs will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success/Error Messages -->
+    <div id="message-container" class="fixed top-4 right-4 w-96 z-50"></div>
+
+    <script>
+        let currentOrderId = null;
+
+        // Load completed orders
+        async function loadCompletedOrders() {
+            try {
+                const token = document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1];
+                const response = await fetch('/admin/completed-orders', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load orders');
+                }
+
+                const orders = await response.json();
+                displayOrders(orders);
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดข้อมูล', 'error');
+            }
+        }
+
+        // Display orders in table
+        function displayOrders(orders) {
+            document.getElementById('loading').classList.add('hidden');
+
+            if (orders.length === 0) {
+                document.getElementById('no-orders').classList.remove('hidden');
+                return;
+            }
+
+            document.getElementById('orders-container').classList.remove('hidden');
+            const tbody = document.getElementById('orders-tbody');
+            tbody.innerHTML = '';
+
+            orders.forEach(order => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        #${order.order_id}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${order.customer_name}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ฿${order.total.toLocaleString()}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${order.assigned_name}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        ${order.updated_at ? new Date(order.updated_at).toLocaleString('th-TH') : 'N/A'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                        <button onclick="showRevertModal(${order.order_id})" 
+                                class="text-yellow-600 hover:text-yellow-900 px-3 py-1 border border-yellow-600 rounded hover:bg-yellow-50">
+                            ย้อนกลับ
+                        </button>
+                        <button onclick="showStatusLogs(${order.order_id})" 
+                                class="text-blue-600 hover:text-blue-900 px-3 py-1 border border-blue-600 rounded hover:bg-blue-50">
+                            ประวัติ
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // Show revert modal
+        function showRevertModal(orderId) {
+            currentOrderId = orderId;
+            document.getElementById('modal-order-id').textContent = `#${orderId}`;
+            document.getElementById('revert-reason').value = '';
+            document.getElementById('confirm-revert').disabled = true;
+            document.getElementById('revert-modal').classList.remove('hidden');
+        }
+
+        // Hide revert modal
+        function hideRevertModal() {
+            document.getElementById('revert-modal').classList.add('hidden');
+            currentOrderId = null;
+        }
+
+        // Revert order status
+        async function revertOrderStatus() {
+            const reason = document.getElementById('revert-reason').value.trim();
+
+            if (!reason) {
+                showMessage('กรุณาระบุเหตุผลในการย้อนกลับสถานะ', 'error');
+                return;
+            }
+
+            try {
+                const token = document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1];
+                const response = await fetch('/admin/revert-order-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        order_id: currentOrderId,
+                        reason: reason
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage(result.message, 'success');
+                    hideRevertModal();
+                    loadCompletedOrders(); // Reload the list
+                } else {
+                    showMessage(result.detail || 'เกิดข้อผิดพลาด', 'error');
+                }
+            } catch (error) {
+                console.error('Error reverting status:', error);
+                showMessage('เกิดข้อผิดพลาดในการย้อนกลับสถานะ', 'error');
+            }
+        }
+
+        // Show status logs
+        async function showStatusLogs(orderId) {
+            try {
+                const token = document.cookie.split('; ').find(row => row.startsWith('Authorization=')).split('=')[1];
+                const response = await fetch(`/admin/order-status-logs/${orderId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load logs');
+                }
+
+                const logs = await response.json();
+                displayStatusLogs(logs);
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                showMessage('เกิดข้อผิดพลาดในการโหลดประวัติ', 'error');
+            }
+        }
+
+        // Display status logs
+        function displayStatusLogs(logs) {
+            const logsContent = document.getElementById('logs-content');
+
+            if (logs.length === 0) {
+                logsContent.innerHTML = '<p class="text-gray-500 text-center py-4">ไม่มีประวัติการเปลี่ยนสถานะ</p>';
+            } else {
+                logsContent.innerHTML = `
+                    <div class="space-y-4">
+                        ${logs.map(log => `
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <div class="flex justify-between items-start mb-2">
+                                    <div class="flex space-x-4">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                            ${log.old_status}
+                                        </span>
+                                        <svg class="w-5 h-5 text-gray-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
+                                        </svg>
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            ${log.new_status}
+                                        </span>
+                                    </div>
+                                    <span class="text-sm text-gray-500">
+                                        ${new Date(log.created_at).toLocaleString('th-TH')}
+                                    </span>
+                                </div>
+                                <div class="text-sm text-gray-700 mb-2">
+                                    <strong>โดย:</strong> ${log.changed_by_name || 'Unknown'}
+                                </div>
+                                <div class="text-sm text-gray-600">
+                                    <strong>เหตุผล:</strong> ${log.reason}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            document.getElementById('logs-modal').classList.remove('hidden');
+        }
+
+        // Show message
+        function showMessage(message, type = 'info') {
+            const container = document.getElementById('message-container');
+            const messageDiv = document.createElement('div');
+
+            const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+
+            messageDiv.className = `${bgColor} text-white p-4 rounded-lg shadow-lg mb-2 transform transition-all duration-300 translate-x-full`;
+            messageDiv.innerHTML = `
+                <div class="flex justify-between items-center">
+                    <span>${message}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            `;
+
+            container.appendChild(messageDiv);
+
+            // Animate in
+            setTimeout(() => {
+                messageDiv.classList.remove('translate-x-full');
+            }, 100);
+
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (messageDiv.parentElement) {
+                    messageDiv.classList.add('translate-x-full');
+                    setTimeout(() => messageDiv.remove(), 300);
+                }
+            }, 5000);
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function () {
+            loadCompletedOrders();
+
+            // Reason textarea validation
+            document.getElementById('revert-reason').addEventListener('input', function () {
+                const reason = this.value.trim();
+                document.getElementById('confirm-revert').disabled = !reason;
+            });
+
+            // Modal event listeners
+            document.getElementById('confirm-revert').addEventListener('click', revertOrderStatus);
+            document.getElementById('cancel-revert').addEventListener('click', hideRevertModal);
+            document.getElementById('close-logs-modal').addEventListener('click', function () {
+                document.getElementById('logs-modal').classList.add('hidden');
+            });
+
+            // Close modals when clicking outside
+            document.getElementById('revert-modal').addEventListener('click', function (e) {
+                if (e.target === this) hideRevertModal();
+            });
+
+            document.getElementById('logs-modal').addEventListener('click', function (e) {
+                if (e.target === this) this.classList.add('hidden');
+            });
+        });
+    </script>
+</body>
+
+</html>

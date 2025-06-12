@@ -743,7 +743,8 @@
             } catch (error) {
                 console.error(error);
                 alert('เกิดข้อผิดพลาดในการโหลดรายการกล้อง: ' + error.message);
-            }        } // ✅ ฟังก์ชันยืนยันออเดอร์ - อัปเดตเพื่อส่งข้อมูล detection แทนภาพ
+            }
+        } // ✅ ฟังก์ชันยืนยันออเดอร์ - อัปเดตเพื่อส่งข้อมูล detection แทนภาพ
         async function verifyOrder(orderId, isVerified) {
             const rawToken = document.cookie.split('; ')
                 .find(row => row.startsWith('Authorization='))?.split('=')[1];
@@ -760,24 +761,24 @@
             if (isVerified && (isAutoStopped || lockedDetectionResults) && currentCamera) {
                 try {
                     console.log("🎯 กำลังส่งข้อมูล detection ไปสร้างภาพที่มีกรอบสินค้า...");
-                    
+
                     // เตรียมข้อมูลสำหรับการสร้างภาพ
                     const detections = lockedDetectionResults.detections || [];
                     const inOrderItems = lockedDetectionResults.in_order_items || [];
-                    
+
                     // กรองเฉพาะ detections ที่มี confidence สูง
                     const confidenceThreshold = 0.7;
                     const filteredDetections = detections.filter(detection => detection.confidence > confidenceThreshold);
-                    
+
                     console.log(`📊 ส่งข้อมูล: ${filteredDetections.length} detections, ${inOrderItems.length} in-order items`);
-                    
+
                     // สร้างภาพที่มีกรอบสินค้าใน backend
                     const annotationFormData = new FormData();
                     annotationFormData.append("camera_id", currentCamera.id);
                     annotationFormData.append("order_id", orderId);
                     annotationFormData.append("detections_json", JSON.stringify(filteredDetections));
                     annotationFormData.append("in_order_items_json", JSON.stringify(inOrderItems));
-                    
+
                     const annotationResponse = await fetch('http://192.168.0.44:8001/packing/create-annotated-image', {
                         method: 'POST',
                         headers: {
@@ -785,7 +786,7 @@
                         },
                         body: annotationFormData
                     });
-                    
+
                     if (annotationResponse.ok) {
                         const annotationResult = await annotationResponse.json();
                         console.log("✅ สร้างภาพที่มีกรอบสินค้าสำเร็จ:", annotationResult.image_path);
@@ -1580,27 +1581,27 @@
                 try {
                     const cameraStreamImg = document.getElementById('camera-stream');
                     const detectionCanvas = document.getElementById('detection-canvas');
-                    
+
                     console.log("🔍 ตรวจสอบองค์ประกอบสำหรับแคปเจอร์ภาพ...");
-                    
+
                     if (!cameraStreamImg) {
                         console.log("❌ ไม่พบ cameraStreamImg element");
                         resolve(null);
                         return;
                     }
-                    
+
                     if (!detectionCanvas) {
                         console.log("❌ ไม่พบ detectionCanvas element");
                         resolve(null);
                         return;
                     }
-                    
+
                     if (!cameraStreamImg.src) {
                         console.log("❌ cameraStreamImg ไม่มี src");
                         resolve(null);
                         return;
                     }
-                    
+
                     if (!cameraStreamImg.complete) {
                         console.log("⚠️ ภาพยังโหลดไม่เสร็จ รอ 500ms แล้วลองใหม่");
                         setTimeout(() => captureCanvasWithProductBoxes().then(resolve), 500);
@@ -1610,19 +1611,19 @@
                     // สร้าง canvas ใหม่สำหรับรวมภาพ
                     const combinedCanvas = document.createElement('canvas');
                     const combinedCtx = combinedCanvas.getContext('2d');
-                    
+
                     if (!combinedCtx) {
                         console.log("❌ ไม่สามารถสร้าง 2D context ได้");
                         resolve(null);
                         return;
                     }
-                    
+
                     // ตั้งขนาด canvas ตามขนาดภาพจริง
                     const imgWidth = cameraStreamImg.naturalWidth || cameraStreamImg.width || 640;
                     const imgHeight = cameraStreamImg.naturalHeight || cameraStreamImg.height || 480;
-                    
+
                     console.log(`📐 ขนาดภาพ: ${imgWidth}x${imgHeight}`);
-                    
+
                     combinedCanvas.width = imgWidth;
                     combinedCanvas.height = imgHeight;
 
@@ -1656,19 +1657,19 @@
                     if (lockedDetectionResults.detections && lockedDetectionResults.detections.length > 0) {
                         const confidenceThreshold = 0.7;
                         const filteredDetections = lockedDetectionResults.detections.filter(detection => detection.confidence > confidenceThreshold);
-                        
+
                         console.log(`🎯 พบ detection ${filteredDetections.length} รายการที่ผ่านเกณฑ์`);
-                        
+
                         filteredDetections.forEach((detection, index) => {
                             try {
                                 const [x1, y1, x2, y2] = detection.box;
-                                
+
                                 // ตรวจสอบค่าพิกัด
                                 if (x1 < 0 || y1 < 0 || x2 > imgWidth || y2 > imgHeight || x1 >= x2 || y1 >= y2) {
                                     console.warn(`⚠️ พิกัดผิดปกติสำหรับ detection ${index}: [${x1}, ${y1}, ${x2}, ${y2}]`);
                                     return;
                                 }
-                                
+
                                 // เลือกสีกรอบ
                                 const isInOrder = lockedDetectionResults.in_order_items && lockedDetectionResults.in_order_items.includes(detection.label);
                                 const color = isInOrder ? '#00ff00' : '#ff0000'; // เขียวสำหรับในออเดอร์, แดงสำหรับนอกออเดอร์
@@ -1691,13 +1692,13 @@
                                 // วาดข้อความ
                                 combinedCtx.fillStyle = '#000000';
                                 combinedCtx.fillText(label, x1 + 5, y1 - 5);
-                                
+
                                 console.log(`✅ วาดกรอบสำหรับ ${detection.label} ที่ [${x1}, ${y1}, ${x2}, ${y2}]`);
                             } catch (boxError) {
                                 console.error(`❌ เกิดข้อผิดพลาดในการวาดกรอบ ${index}:`, boxError);
                             }
                         });
-                        
+
                         console.log(`✅ แคปเจอร์ภาพพร้อมกรอบสินค้า ${filteredDetections.length} รายการ`);
                     } else {
                         console.log("ℹ️ ไม่มี detection ให้วาดกรอบ");
@@ -1732,7 +1733,7 @@
             return new Promise((resolve) => {
                 try {
                     const cameraStreamImg = document.getElementById('camera-stream');
-                    
+
                     if (!cameraStreamImg || !cameraStreamImg.src || !cameraStreamImg.complete) {
                         console.log("⚠️ ไม่สามารถแคปเจอร์ภาพต้นฉบับได้");
                         resolve(null);
@@ -1741,15 +1742,15 @@
 
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
-                    
+
                     const width = cameraStreamImg.naturalWidth || cameraStreamImg.width || 640;
                     const height = cameraStreamImg.naturalHeight || cameraStreamImg.height || 480;
-                    
+
                     canvas.width = width;
                     canvas.height = height;
-                    
+
                     ctx.drawImage(cameraStreamImg, 0, 0, width, height);
-                    
+
                     canvas.toBlob((blob) => {
                         if (blob) {
                             console.log(`✅ แคปเจอร์ภาพต้นฉบับสำเร็จ ขนาด: ${blob.size} bytes`);
@@ -1759,7 +1760,7 @@
                             resolve(null);
                         }
                     }, 'image/jpeg', 0.9);
-                    
+
                 } catch (error) {
                     console.error("❌ เกิดข้อผิดพลาดในการแคปเจอร์ภาพต้นฉบับ:", error);
                     resolve(null);
@@ -1771,7 +1772,7 @@
         function debugDOMElements() {
             const cameraStreamImg = document.getElementById('camera-stream');
             const detectionCanvas = document.getElementById('detection-canvas');
-            
+
             console.log("🔍 DOM Elements Debug:");
             console.log("cameraStreamImg:", cameraStreamImg);
             console.log("cameraStreamImg.src:", cameraStreamImg?.src);
@@ -1781,7 +1782,7 @@
             console.log("detectionCanvas:", detectionCanvas);
             console.log("lockedDetectionResults:", lockedDetectionResults);
             console.log("isAutoStopped:", isAutoStopped);
-            
+
             return {
                 cameraStreamImg,
                 detectionCanvas,
