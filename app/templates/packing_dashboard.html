@@ -413,7 +413,7 @@
             const token = rawToken.replace(/^"?Bearer\s+/, '').replace(/"/g, '');
 
             try {
-                const response = await fetch(`http://192.168.0.44:8001/packing/orders/current`, {
+                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/current`, {
                     // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/current`, {
                     method: 'GET',
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -704,7 +704,7 @@
             }
 
             // เปิดหน้าต่างใหม่สำหรับการตรวจจับแบบสตรีมโดยตรง
-            const directUrl = `http://192.168.0.44:8001/packing/realtime-detect-direct?camera_id=${currentCamera.id}&token=${token}`;
+            const directUrl = `https://thesis-api.jintaphas.tech/packing/realtime-detect-direct?camera_id=${currentCamera.id}&token=${token}`;
             window.open(directUrl, '_blank', 'width=680,height=520');
         }        // โหลดรายชื่อกล้องจาก DB
         async function loadCameraList() {
@@ -714,7 +714,7 @@
             // แยก JWT token จาก "Bearer " prefix และ quotes
             const token = rawToken ? rawToken.replace(/^"?Bearer\s+/, '').replace(/"/g, '') : null;
             try {
-                const response = await fetch('http://192.168.0.44:8001/packing/cameras', {
+                const response = await fetch('https://thesis-api.jintaphas.tech/packing/cameras', {
                     // const response = await fetch('https://thesis-api.jintaphas.tech/packing/cameras', {
                     method: 'GET',
                     headers: {
@@ -779,7 +779,7 @@
                     annotationFormData.append("detections_json", JSON.stringify(filteredDetections));
                     annotationFormData.append("in_order_items_json", JSON.stringify(inOrderItems));
 
-                    const response = await fetch('http://192.168.0.44:8001/packing/create-annotated-image', {
+                    const response = await fetch('https://thesis-api.jintaphas.tech/packing/create-annotated-image', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${token}`
@@ -812,7 +812,7 @@
 
             try {
                 console.log("🔄 กำลังส่งคำขอยืนยันออเดอร์...");
-                const response = await fetch(`http://192.168.0.44:8001/packing/orders/${orderId}/verify`, {
+                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/verify`, {
                     // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/verify`, {
                     method: "PUT",
                     headers: {
@@ -1186,7 +1186,7 @@
                     console.log("⚠️ ไม่พบ currentOrderId");
                     return;
                 }                // ส่งคำขอไปยัง backend
-                const response = await fetch('http://192.168.0.44:8001/packing/detect-from-camera', {
+                const response = await fetch('https://thesis-api.jintaphas.tech/packing/detect-from-camera', {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -2031,7 +2031,7 @@
 
                 // แสดง loading spinner
                 document.getElementById('camera-loading-spinner').style.display = 'block';                // เปิด camera stream
-                const streamUrl = `http://192.168.0.44:8001/packing/stream?camera_id=${currentCamera.id}&token=${token}`;
+                const streamUrl = `https://thesis-api.jintaphas.tech/packing/stream?camera_id=${currentCamera.id}&token=${token}`;
                 const cameraStreamImg = document.getElementById('camera-stream');
                 cameraStreamImg.src = streamUrl;
 
@@ -2156,7 +2156,7 @@
             // แยก JWT token จาก "Bearer " prefix และ quotes
             const token = rawToken ? rawToken.replace(/^"?Bearer\s+/, '').replace(/"/g, '') : null;
             try {
-                const response = await fetch('http://192.168.0.44:8001/packing/orders/packing', {
+                const response = await fetch('https://thesis-api.jintaphas.tech/packing/orders/packing', {
                     // const response = await fetch('https://thesis-api.jintaphas.tech/packing/orders/packing', {
                     method: 'GET',
                     headers: {
@@ -2231,7 +2231,7 @@
             const token = rawToken.replace(/^"?Bearer\s+/, '').replace(/"/g, '');
 
             try {
-                const response = await fetch(`http://192.168.0.44:8001/packing/orders/${orderId}/assign`, {
+                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/assign`, {
                     // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/assign`, {
                     method: 'PUT',
                     headers: {
@@ -2281,7 +2281,7 @@
             const token = rawToken.replace(/^"?Bearer\s+/, '').replace(/"/g, '');
 
             try {
-                const response = await fetch(`http://192.168.0.44:8001/packing/orders/${orderId}/cancel-assignment`, {
+                const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/cancel-assignment`, {
                     // const response = await fetch(`https://thesis-api.jintaphas.tech/packing/orders/${orderId}/cancel-assignment`, {
                     method: 'PUT',
                     headers: {

@@ -185,7 +185,7 @@
             const modalImg = document.getElementById('modal-image');
 
             // ✅ ใช้ API `/orders/{order_id}/image` แทน `image_path` ตรงๆ
-            modalImg.src = `http://192.168.0.44:8001/packing/orders/${orderId}/image`;
+            modalImg.src = `https://thesis-api.jintaphas.tech/packing/orders/${orderId}/image`;
             // modalImg.src = `https://thesis-api.jintaphas.tech/packing/orders/${orderId}/image`;
 
             modal.style.display = "block";

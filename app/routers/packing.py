@@ -1299,7 +1299,7 @@ async def verify_order(
         order.updated_at = datetime.utcnow()  # บันทึกเวลาที่ทำการยืนยัน
         db.commit()        # ✅ ส่ง HTTP Request ไปยัง Home เพื่อให้แจ้งเตือน Admin และพนักงานจัดเตรียม
         try:
-            url = "http://192.168.0.44:8000/admin/trigger-notify"
+            url = "https://home.jintaphas.tech/admin/trigger-notify"
             # url = "https://home.jintaphas.tech/admin/trigger-notify"
             payload = {
                 "order_id": order_id,
