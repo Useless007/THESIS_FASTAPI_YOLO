@@ -1528,7 +1528,7 @@ async def websocket_camera_detect(websocket: WebSocket, camera_id: int = Query(.
         try:
             while detection_flags.get(camera_id, True):
                 if camera_id not in video_captures or not video_captures[camera_id].isOpened():
-                    print(f"⚠️ Camera {camera_id} is closed")
+                    print(f"⚠️ กล้อง {camera_id} ถูกปิด")
                     break
                 
                 success, frame = video_captures[camera_id].read()
@@ -1676,13 +1676,17 @@ def create_annotated_image(original_image, detections, in_order_items):
     """
     สร้างภาพที่มีกรอบสินค้าจากข้อมูล detection
     แสดงเฉพาะกรอบสินค้าที่อยู่ในออเดอร์ (ไม่แสดง unknown objects)
+    เพิ่มกล่องสรุปรายการสินค้าที่มุมซ้ายบนของภาพ
     """
     try:
         # คัดลอกภาพต้นฉบับ
         annotated_img = original_image.copy()
         img_height, img_width = annotated_img.shape[:2]
         
-        # วาดกรอบเฉพาะสินค้าในออเดอร์
+        # นับจำนวนสินค้าที่พบในแต่ละประเภท
+        item_counts = {}
+        
+        # วาดกรอบเฉพาะสินค้าในออเดอร์และนับจำนวน
         for detection in detections:
             label = detection.get("label", "")
             confidence = detection.get("confidence", 0)
@@ -1690,6 +1694,11 @@ def create_annotated_image(original_image, detections, in_order_items):
             
             # ตรวจสอบว่าเป็นสินค้าในออเดอร์หรือไม่
             if label in in_order_items and len(box) == 4:
+                # เพิ่มการนับสินค้า
+                if label not in item_counts:
+                    item_counts[label] = 0
+                item_counts[label] += 1
+                
                 x1, y1, x2, y2 = box
                 
                 # แปลงเป็น integer และตรวจสอบขอบเขต
@@ -1699,39 +1708,110 @@ def create_annotated_image(original_image, detections, in_order_items):
                 x2 = max(0, min(x2, img_width))
                 y2 = max(0, min(y2, img_height))
                 
-
                 # วาดกรอบสีเขียว
                 cv2.rectangle(annotated_img, (x1, y1), (x2, y2), (0, 255, 0), 3)
                 
-                # เตรียมข้อความ label
-                label_text = f"{label}: {confidence:.2f}"
+                # วาดหมายเลขของสินค้าชิ้นนี้ (เช่น 1, 2, 3)
+                item_number = str(item_counts[label])
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                font_scale = 0.7
+                font_scale = 1.0
                 thickness = 2
                 
-                # คำนวณขนาดข้อความ
+                # วาดพื้นหลังสีเขียวสำหรับหมายเลข
                 (text_width, text_height), baseline = cv2.getTextSize(
-                    label_text, font, font_scale, thickness
+                    item_number, font, font_scale, thickness
                 )
-                
-                # วาดพื้นหลังสีเขียวสำหรับข้อความ
-                text_x = x1
-                text_y = y1 - 10
-                if text_y < 0:
-                    text_y = y1 + text_height + 10
                 
                 cv2.rectangle(
                     annotated_img,
-                    (text_x, text_y - text_height - baseline),
-                    (text_x + text_width, text_y + baseline),
+                    (x1, y1),
+                    (x1 + text_width + 10, y1 + text_height + 10),
                     (0, 255, 0), -1
                 )
                 
-                # วาดข้อความสีขาว
+                # วาดหมายเลขสีขาว
                 cv2.putText(
-                    annotated_img, label_text,
-                    (text_x, text_y - baseline),
+                    annotated_img, item_number,
+                    (x1 + 5, y1 + text_height + 5),
                     font, font_scale, (255, 255, 255), thickness
+                )
+        
+        # สร้างกล่องสรุปรายการสินค้าที่มุมซ้ายบน
+        if item_counts:            # คำนวณขนาดของกล่อง
+            box_padding = 20
+            header = "Items in Order"
+            item_texts = [f"{label}: {count} pcs" for label, count in item_counts.items()]
+            
+            # กำหนดรูปแบบข้อความ - ใช้ฟอนต์ที่รองรับภาษาอังกฤษ
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            header_font_scale = 0.8
+            item_font_scale = 0.7
+            thickness = 2
+            line_height = 30
+            
+            # คำนวณความกว้างาของกล่อง
+            header_width, _ = cv2.getTextSize(header, font, header_font_scale, thickness)[0]
+            max_item_width = 0
+            for item_text in item_texts:
+                item_width, _ = cv2.getTextSize(item_text, font, item_font_scale, thickness)[0]
+                max_item_width = max(max_item_width, item_width)
+            
+            box_width = max(header_width, max_item_width) + box_padding * 2
+            box_height = box_padding * 2 + line_height * (len(item_texts) + 1)
+            
+            # วาดกล่องพื้นหลังสีขาวโปร่งแสง
+            overlay = annotated_img.copy()
+            cv2.rectangle(
+                overlay, 
+                (10, 10), 
+                (10 + box_width, 10 + box_height),
+                (255, 255, 255), 
+                -1
+            )
+            # ผสมภาพต้นฉบับกับ overlay ให้โปร่งแสง
+            alpha = 0.8
+            cv2.addWeighted(overlay, alpha, annotated_img, 1 - alpha, 0, annotated_img)
+            
+            # วาดขอบกล่อง
+            cv2.rectangle(
+                annotated_img, 
+                (10, 10), 
+                (10 + box_width, 10 + box_height),
+                (0, 0, 0), 
+                2
+            )
+            
+            # วาดหัวข้อ
+            cv2.putText(
+                annotated_img,
+                header,
+                (10 + box_padding, 10 + box_padding + line_height // 2),
+                font,
+                header_font_scale,
+                (0, 0, 0),
+                thickness
+            )
+            
+            # วาดเส้นคั่น
+            cv2.line(
+                annotated_img,
+                (10 + box_padding // 2, 10 + box_padding + line_height),
+                (10 + box_width - box_padding // 2, 10 + box_padding + line_height),
+                (0, 0, 0),
+                1
+            )
+            
+            # วาดรายการสินค้า
+            for i, item_text in enumerate(item_texts):
+                y_pos = 10 + box_padding + (i + 2) * line_height
+                cv2.putText(
+                    annotated_img,
+                    item_text,
+                    (10 + box_padding, y_pos),
+                    font,
+                    item_font_scale,
+                    (0, 0, 0),
+                    thickness - 1
                 )
         
         return annotated_img

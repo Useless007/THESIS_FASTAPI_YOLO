@@ -1263,24 +1263,61 @@
             filteredDetections.forEach(detection => {
                 const label = detection.label;
                 counts[label] = (counts[label] || 0) + 1;
-            });
-
-            // ✅ แยกสินค้าในออเดอร์และสินค้าเกิน
+            });            // ✅ แยกสินค้าในออเดอร์และสินค้าเกิน
             const orderItems = {};
             const extraItems = {};
 
+            // ดึงข้อมูลจำนวนที่สั่งจาก DOM
+            const currentOrderDiv = document.getElementById('current-order');
+            const orderItemElements = currentOrderDiv.querySelectorAll('li');
+            const requiredItems = {};
+
+            orderItemElements.forEach(item => {
+                const productNameElement = item.querySelector('strong');
+                if (!productNameElement) return;
+
+                const productName = productNameElement.textContent.trim();
+                const itemText = item.textContent.trim();
+                const quantityMatch = itemText.match(/(\d+)\s+ชิ้น/);
+                const quantity = quantityMatch ? parseInt(quantityMatch[1]) : 1;
+
+                requiredItems[productName] = quantity;
+            });
+
+            // ตรวจสอบแต่ละ item ที่ตรวจพบ
             Object.keys(counts).forEach(label => {
-                const isInOrder = result.in_order_items && result.in_order_items.includes(label);
-                if (isInOrder) {
-                    orderItems[label] = counts[label];
+                let found = false;
+                let requiredQty = 0;
+
+                // หาว่า label นี้ตรงกับสินค้าในออเดอร์ชิ้นไหน
+                for (const [productName, qty] of Object.entries(requiredItems)) {
+                    if (label.toLowerCase().includes(productName.toLowerCase()) ||
+                        productName.toLowerCase().includes(label.toLowerCase())) {
+                        found = true;
+                        requiredQty = qty;
+                        break;
+                    }
+                }
+
+                if (found) {
+                    const detectedQty = counts[label];
+                    if (detectedQty <= requiredQty) {
+                        // ถ้าจำนวนไม่เกิน ถือว่าอยู่ในออเดอร์
+                        orderItems[label] = detectedQty;
+                    } else {
+                        // ถ้าจำนวนเกิน แยกเป็นในออเดอร์กับเกิน
+                        orderItems[label] = requiredQty;
+                        extraItems[label] = detectedQty - requiredQty;
+                    }
                 } else {
+                    // ถ้าไม่ใช่สินค้าในออเดอร์ ถือว่าเกินทั้งหมด
                     extraItems[label] = counts[label];
                 }
             });
 
             // ✅ ตรวจสอบสถานะความครบถ้วนของออเดอร์
-            const orderComplete = checkIfOrderComplete(orderItems, result.in_order_items || []);            // ✅ ระบบหยุดอัตโนมัติ - ตรวจสอบว่าสินค้าครบและไม่เกิน
-            if (orderComplete && Object.keys(extraItems).length === 0) {
+            const orderComplete = checkIfOrderComplete(orderItems, result.in_order_items || []);            // ✅ ระบบหยุดอัตโนมัติ - ตรวจสอบว่าสินค้าครบและไม่มีสินค้าเกิน
+            if (orderComplete && Object.values(extraItems).reduce((sum, qty) => sum + qty, 0) === 0) {
                 consecutiveMatchFrames++;
                 console.log(`✅ เฟรมที่ตรงกัน: ${consecutiveMatchFrames}/${autoStopThreshold}`);
                 updateDetectionStatus('detecting', consecutiveMatchFrames);
@@ -1442,11 +1479,37 @@
                 const scaledX1 = x1 * scaleX;
                 const scaledY1 = y1 * scaleY;
                 const scaledX2 = x2 * scaleX;
-                const scaledY2 = y2 * scaleY;
+                const scaledY2 = y2 * scaleY;                // ตรวจสอบจำนวนและสถานะในออเดอร์
+                const isInOrder = inOrderItems.includes(detection.label);// ตรวจสอบจำนวนที่เกินสำหรับสินค้าชนิดนี้
+                const currentOrderDiv = document.getElementById('current-order');
+                const orderItemElements = currentOrderDiv.querySelectorAll('li');
+                let requiredQty = 0;
+                let detectedCount = 0;
 
-                // เลือกสีกรอบ
-                const isInOrder = inOrderItems.includes(detection.label);
-                const color = isInOrder ? '#00ff00' : '#ff0000'; // เขียวสำหรับในออเดอร์, แดงสำหรับนอกออเดอร์
+                // หาจำนวนที่สั่งจาก DOM
+                orderItemElements.forEach(item => {
+                    const productNameElement = item.querySelector('strong');
+                    if (!productNameElement) return;
+
+                    const productName = productNameElement.textContent.trim();
+                    if (detection.label.toLowerCase().includes(productName.toLowerCase()) ||
+                        productName.toLowerCase().includes(detection.label.toLowerCase())) {
+                        const itemText = item.textContent.trim();
+                        const quantityMatch = itemText.match(/(\d+)\s+ชิ้น/);
+                        requiredQty = quantityMatch ? parseInt(quantityMatch[1]) : 1;
+                    }
+                });
+
+                // นับจำนวนที่ตรวจพบแล้วก่อนหน้านี้
+                detections.forEach(d => {
+                    if (d.label === detection.label &&
+                        d.box[0] <= detection.box[0]) { // นับเฉพาะกล่องที่อยู่ทางซ้ายหรือตำแหน่งเดียวกัน
+                        detectedCount++;
+                    }
+                });
+
+                // กำหนดสี - แดงถ้าเกินจำนวน, เขียวถ้าไม่เกิน
+                const color = detectedCount > requiredQty ? '#ff0000' : '#00ff00';
 
                 // วาดกรอบ
                 canvasCtx.strokeStyle = color;
@@ -1454,7 +1517,7 @@
                 canvasCtx.strokeRect(scaledX1, scaledY1, scaledX2 - scaledX1, scaledY2 - scaledY1);
 
                 // วาดป้ายชื่อ
-                const label = `${detection.label}: ${(detection.confidence * 100).toFixed(1)}%`;
+                const label = `${detection.label}: ${(detection.confidence * 100).toFixed(1)}% (${detectedCount}/${requiredQty})`;
                 canvasCtx.fillStyle = color;
                 canvasCtx.font = '16px Arial';
 
