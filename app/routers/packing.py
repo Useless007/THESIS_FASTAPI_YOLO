@@ -3,7 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor
 import asyncio
 import requests
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException,Query,Header, Response, Request, Form, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query, Header, Response, Request, Form, WebSocket, WebSocketDisconnect, Body
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse, HTMLResponse
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
@@ -1699,7 +1699,7 @@ def create_annotated_image(original_image, detections, in_order_items):
                 x2 = max(0, min(x2, img_width))
                 y2 = max(0, min(y2, img_height))
                 
-                
+
                 # วาดกรอบสีเขียว
                 cv2.rectangle(annotated_img, (x1, y1), (x2, y2), (0, 255, 0), 3)
                 
@@ -1817,3 +1817,4 @@ async def create_annotated_image_endpoint(
         print(f"❌ Error creating annotated image: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to create annotated image: {str(e)}")
+

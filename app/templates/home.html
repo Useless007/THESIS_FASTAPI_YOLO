@@ -417,15 +417,30 @@
                         </li>
                         {% endfor %}
                     </ul>
-                </aside>
-
-                <!-- Product Cards -->
+                </aside> <!-- Product Cards -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full" id="product-grid">
                     {% for product in products %}
-                    <div class="bg-white rounded-lg shadow p-4 flex flex-col h-[450px]"
+                    <div class="bg-white rounded-lg shadow p-4 flex flex-col h-[450px] relative"
                         data-category="{{ product.category }}" data-id="{{ product.product_id }}"
                         data-name="{{ product.name }}" data-price="{{ product.price }}"
                         data-stock="{{ product.stock }}">
+                        <!-- 🎯 AI Status Badge - มุมขวาบน (แสดงเฉพาะพนักงาน) -->
+                        {% if current_user and current_user.__class__.__name__ == 'User' %}
+                        <div class="absolute top-2 right-2 z-10">
+                            {% if product.ai_trained %}
+                            <span
+                                class="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full border border-green-300 shadow-sm">
+                                ✅ AI ฝึกแล้ว
+                            </span>
+                            {% else %}
+                            <span
+                                class="bg-orange-100 text-orange-800 text-xs font-medium px-2 py-1 rounded-full border border-orange-300 shadow-sm">
+                                ⏳ รอการเทรน AI
+                            </span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
                         <!-- รูปภาพที่มีความสูงคงที่ -->
                         <div class="h-48 flex items-center justify-center mb-3">
                             <img src="{{ product.image_path }}" alt="{{ product.name }}"

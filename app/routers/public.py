@@ -53,14 +53,28 @@ def get_homepage(
     """
     แสดงหน้าแรก พร้อมสินค้าทั้งหมดและหมวดหมู่
     สนับสนุนทั้งลูกค้าและพนักงาน
+    🔒 ลูกค้าจะเห็นเฉพาะสินค้าที่ผ่านการเทรน AI แล้ว
     """
     # ดึงสินค้าทั้งหมดจากฐานข้อมูล
-    products = db.query(Product).all()
+    all_products = db.query(Product).all()
     
     # สร้าง list ใหม่สำหรับสินค้าที่มี category
     products_with_category = []
-    for product in products:
+    for product in all_products:
         category = get_product_category(product.product_id)
+          # ⚡ ตรวจสอบสถานะ AI Training
+        is_ai_trained = "✅ AI_TRAINED" in (product.description or "")
+        
+        # 🛡️ การกรองสินค้าตามประเภทผู้ใช้
+        # ลูกค้า (Customer) หรือ ไม่ได้ล็อกอิน - เห็นเฉพาะสินค้าที่เทรน AI แล้ว
+        # พนักงาน (User) - เห็นสินค้าทั้งหมด
+        if isinstance(current_user, Customer) or current_user is None:
+            if not is_ai_trained:
+                print(f"🚫 ซ่อนสินค้า '{product.name}' จากลูกค้า (ยังไม่ได้เทรน AI)")
+                continue  # ข้ามสินค้าที่ยังไม่ได้เทรน AI สำหรับลูกค้า
+        elif isinstance(current_user, User):
+            print(f"👁️ พนักงาน '{current_user.email}' เห็นสินค้า '{product.name}' (AI: {'✅' if is_ai_trained else '❌'})")
+        
         product_dict = {
             "product_id": product.product_id,
             "name": product.name,
@@ -68,7 +82,8 @@ def get_homepage(
             "description": product.description,
             "image_path": product.image_path,
             "category": category,
-            "stock": product.stock  # เพิ่มข้อมูล stock
+            "stock": product.stock,
+            "ai_trained": is_ai_trained  # เพิ่มข้อมูลสถานะ AI Training
         }
         products_with_category.append(product_dict)
     
@@ -93,18 +108,32 @@ def get_products_by_category(
     """
     แสดงสินค้าตามประเภทที่เลือก
     สนับสนุนทั้งลูกค้าและพนักงาน
+    🔒 ลูกค้าจะเห็นเฉพาะสินค้าที่ผ่านการเทรน AI แล้ว
     """
     # ตรวจสอบว่าประเภทที่ส่งมาถูกต้องหรือไม่
     if category not in CATEGORIES and category != "all":
         category = "all"
     
     # ดึงสินค้าทั้งหมด
-    products = db.query(Product).all()
+    all_products = db.query(Product).all()
     
     # แปลงสินค้าเป็น dictionary และกรองตามประเภท
     filtered_products = []
-    for product in products:
+    for product in all_products:
         product_category = get_product_category(product.product_id)
+          # ⚡ ตรวจสอบสถานะ AI Training
+        is_ai_trained = "✅ AI_TRAINED" in (product.description or "")
+        
+        # 🛡️ การกรองสินค้าตามประเภทผู้ใช้
+        # ลูกค้า (Customer) หรือ ไม่ได้ล็อกอิน - เห็นเฉพาะสินค้าที่เทรน AI แล้ว
+        # พนักงาน (User) - เห็นสินค้าทั้งหมด
+        if isinstance(current_user, Customer) or current_user is None:
+            if not is_ai_trained:
+                print(f"🚫 ซ่อนสินค้า '{product.name}' จากลูกค้า (ยังไม่ได้เทรน AI)")
+                continue  # ข้ามสินค้าที่ยังไม่ได้เทรน AI สำหรับลูกค้า
+        elif isinstance(current_user, User):
+            print(f"👁️ พนักงาน '{current_user.email}' เห็นสินค้า '{product.name}' (AI: {'✅' if is_ai_trained else '❌'})")
+        
         product_dict = {
             "product_id": product.product_id,
             "name": product.name,
@@ -112,9 +141,11 @@ def get_products_by_category(
             "description": product.description,
             "image_path": product.image_path,
             "category": product_category,
-            "stock": product.stock  # เพิ่มข้อมูล stock
+            "stock": product.stock,
+            "ai_trained": is_ai_trained  # เพิ่มข้อมูลสถานะ AI Training
         }
         
+        # กรองตามประเภทสินค้า
         if category == "all" or product_category == category:
             filtered_products.append(product_dict)
     

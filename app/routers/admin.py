@@ -935,3 +935,232 @@ def get_all_status_logs(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"❌ เกิดข้อผิดพลาด: {str(e)}")
+
+# ============== 📦 PRODUCT MANAGEMENT ROUTES ==============
+
+@router.get("/products", response_class=HTMLResponse)
+def get_product_management(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    แสดงหน้าจัดการสินค้า (สำหรับแอดมิน)
+    """
+    print(f"🛡️ Product Management Access by: {current_user.email}")
+    return templates.TemplateResponse("admin_products.html", {"request": request, "current_user": current_user})
+
+@router.get("/api/products", response_class=JSONResponse)
+def get_all_products(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ดึงข้อมูลสินค้าทั้งหมดพร้อมสถานะ AI
+    """
+    from app.models.product import Product
+    
+    products = db.query(Product).all()
+    product_list = []
+    
+    for product in products:
+        # ตรวจสอบว่าสินค้านี้สามารถตรวจจับด้วย AI ได้หรือไม่
+        # โดยดูจากคำว่า "AI_TRAINED" ใน description
+        ai_trainable = "✅ AI_TRAINED" in (product.description or "")
+        
+        product_data = {
+            "product_id": product.product_id,
+            "name": product.name,
+            "price": product.price,
+            "description": product.description,
+            "image_path": product.image_path,
+            "stock": product.stock,
+            "ai_trainable": ai_trainable,
+            "ai_status": "ฝึกแล้ว" if ai_trainable else "ยังไม่ได้ฝึก"
+        }
+        product_list.append(product_data)
+    
+    return product_list
+
+# Route สำหรับเพิ่มสินค้าใหม่
+@router.post("/api/products", response_class=JSONResponse)
+def create_product(
+    request_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    เพิ่มสินค้าใหม่ (สินค้าใหม่จะไม่สามารถตรวจจับด้วย AI ได้จนกว่าจะมีการเทรน)
+    """
+    from app.models.product import Product
+    
+    name = request_data.get("name", "").strip()
+    price = request_data.get("price", 0)
+    description = request_data.get("description", "").strip()
+    image_path = request_data.get("image_path", "")
+    stock = request_data.get("stock", 0)
+    
+    if not name:
+        raise HTTPException(status_code=400, detail="❌ กรุณาระบุชื่อสินค้า")
+    
+    if price <= 0:
+        raise HTTPException(status_code=400, detail="❌ ราคาสินค้าต้องมากกว่า 0")
+    
+    try:
+        # เพิ่มข้อความแจ้งเตือนใน description ว่าสินค้ายังไม่ได้เทรน AI
+        ai_warning = "⚠️ สินค้าใหม่ - ยังไม่สามารถตรวจจับด้วย AI ได้ (ต้องการการเทรนข้อมูลก่อน)"
+        full_description = f"{description}\n\n{ai_warning}" if description else ai_warning
+        
+        new_product = Product(
+            name=name,
+            price=price,
+            description=full_description,
+            image_path=image_path,
+            stock=stock
+        )
+        
+        db.add(new_product)
+        db.commit()
+        db.refresh(new_product)
+        
+        return {
+            "message": f"✅ เพิ่มสินค้า '{name}' สำเร็จ",
+            "product_id": new_product.product_id,
+            "warning": "⚠️ สินค้าใหม่จะยังไม่สามารถตรวจจับด้วย AI ได้จนกว่าจะมีการเทรนข้อมูล"
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"❌ เกิดข้อผิดพลาด: {str(e)}")
+
+# Route สำหรับแก้ไขสินค้า
+@router.put("/api/products/{product_id}", response_class=JSONResponse)
+def update_product(
+    product_id: int,
+    request_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    แก้ไขข้อมูลสินค้า
+    """
+    from app.models.product import Product
+    
+    product = db.query(Product).filter(Product.product_id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="❌ ไม่พบสินค้า")
+    
+    name = request_data.get("name", "").strip()
+    price = request_data.get("price", 0)
+    description = request_data.get("description", "").strip()
+    image_path = request_data.get("image_path", "")
+    stock = request_data.get("stock", 0)
+    
+    if name:
+        product.name = name
+    if price > 0:
+        product.price = price
+    if description:
+        product.description = description
+    if image_path:
+        product.image_path = image_path
+    if stock >= 0:
+        product.stock = stock
+    
+    try:
+        db.commit()
+        
+        return {
+            "message": f"✅ อัปเดตสินค้า '{product.name}' สำเร็จ",
+            "product_id": product_id
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"❌ เกิดข้อผิดพลาด: {str(e)}")
+
+# Route สำหรับลบสินค้า
+@router.delete("/api/products/{product_id}", response_class=JSONResponse)
+def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    ลบสินค้า (จะตรวจสอบว่ามีออเดอร์ที่ใช้สินค้านี้หรือไม่)
+    """
+    from app.models.product import Product
+    from app.models.order_item import OrderItem
+    
+    product = db.query(Product).filter(Product.product_id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="❌ ไม่พบสินค้า")
+    
+    # ตรวจสอบว่ามีออเดอร์ไอเทมที่ใช้สินค้านี้หรือไม่
+    order_items = db.query(OrderItem).filter(OrderItem.product_id == product_id).first()
+    if order_items:
+        raise HTTPException(
+            status_code=400, 
+            detail="❌ ไม่สามารถลบสินค้านี้ได้ เนื่องจากมีการสั่งซื้อแล้ว"
+        )
+    
+    try:
+        product_name = product.name
+        db.delete(product)
+        db.commit()
+        
+        return {
+            "message": f"✅ ลบสินค้า '{product_name}' สำเร็จ",
+            "product_id": product_id
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"❌ เกิดข้อผิดพลาด: {str(e)}")
+
+# Route สำหรับอัปเดตสถานะ AI ของสินค้า
+@router.put("/api/products/{product_id}/ai-status", response_class=JSONResponse)
+def update_product_ai_status(
+    product_id: int,
+    request_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_user_with_role_and_position_and_isActive(1, 2))
+):
+    """
+    อัปเดตสถานะ AI ของสินค้า (เมื่อมีการเทรนเสร็จ)
+    """
+    from app.models.product import Product
+    
+    product = db.query(Product).filter(Product.product_id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="❌ ไม่พบสินค้า")
+    
+    ai_trained = request_data.get("ai_trained", False)
+    ai_class_name = request_data.get("ai_class_name", "")
+    
+    try:
+        if ai_trained:
+            # เพิ่มเครื่องหมายว่าเทรนแล้ว
+            if "✅ AI_TRAINED" not in (product.description or ""):
+                product.description = f"{product.description or ''}\n\n✅ AI_TRAINED"
+                if ai_class_name:
+                    product.description += f" - Class: {ai_class_name}"
+        else:
+            # ลบเครื่องหมายการเทรน
+            if product.description:
+                product.description = product.description.replace("✅ AI_TRAINED", "")
+                # ลบข้อมูล class ด้วย
+                import re
+                product.description = re.sub(r" - Class: [^\n]*", "", product.description)
+        
+        db.commit()
+        
+        status_text = "เทรนแล้ว" if ai_trained else "ยังไม่ได้เทรน"
+        return {
+            "message": f"✅ อัปเดตสถานะ AI ของสินค้า '{product.name}' เป็น '{status_text}' สำเร็จ",
+            "product_id": product_id,
+            "ai_trained": ai_trained
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"❌ เกิดข้อผิดพลาด: {str(e)}")
