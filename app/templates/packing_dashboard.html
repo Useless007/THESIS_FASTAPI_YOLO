@@ -401,6 +401,7 @@
         let lockedOrderItems = {}; // เก็บรายการสินค้าในออเดอร์ที่ล็อคไว้
         let lockedExtraItems = {}; // เก็บรายการสินค้าเกินที่ล็อคไว้
         let lastDetectionState = null; // เก็บสถานะการตรวจจับครั้งล่าสุด
+        let currentDrawnUnknownObjects = 0; // ✅ เก็บจำนวน unknown objects ที่ถูกวาดจริงๆ
 
         // ✅ โหลดออเดอร์ที่รับมาแล้วตอนเปิดหน้าเว็บ
         async function loadCurrentOrder() {
@@ -558,6 +559,18 @@
                 }
             });
 
+            // ✅ ตรวจสอบว่ามี unknown objects ที่ถูกวาดจริงหรือไม่
+            const hasUnknownObjectsWithBox = currentDrawnUnknownObjects > 0;
+
+            // ✅ Debug log สำหรับการตรวจสอบ unknown objects ที่มีกรอบ
+            console.log('🔍 Unknown Objects Check in checkOrderItemsMatch:', {
+                hasUnknownObjectsWithBox,
+                currentDrawnUnknownObjects,
+                totalIrrelevantObjects: window.currentDetectionResult?.irrelevant_objects?.length || 0,
+                isAutoStopped,
+                lockedDetectionResults: !!lockedDetectionResults
+            });
+
             // ถ้าตรวจพบทุกรายการแล้ว ให้แสดงข้อความและปุ่มยืนยัน
             const verificationStatus = document.getElementById('verification-status');
 
@@ -592,6 +605,20 @@
                         </ul>
                     </div>
                 `;
+            }
+
+            // ✅ สร้าง HTML สำหรับแสดงสิ่งแปลกปลอมที่ตรวจพบ (ถ้ามี) - เฉพาะที่ถูกวาดจริง
+            let unknownObjectsHtml = '';
+            if (hasUnknownObjectsWithBox) {
+                unknownObjectsHtml = `
+                    <div class="mt-4 p-3 bg-red-100 border border-red-400 rounded-md">
+                        <p class="font-bold text-red-700">⚠️ พบสิ่งแปลกปลอมในภาพ:</p>
+                        <ul class="mt-2 text-red-800">
+                            <li>- จำนวนสิ่งแปลกปลอมที่ถูกตีกรอบ: <span class="font-bold">${currentDrawnUnknownObjects} รายการ</span></li>
+                        </ul>
+                        <p class="mt-2 text-red-700 font-semibold">กรุณานำสิ่งแปลกปลอมออกจากภาพก่อนยืนยัน</p>
+                    </div>
+                `;
             } if (allItemsFound && Object.keys(foundItems).length > 0) {
                 verificationStatus.innerHTML = `
                     <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 my-4 rounded-md shadow-sm">
@@ -604,8 +631,9 @@
                         <p class="ml-8 text-sm">คุณสามารถยืนยันการบรรจุสินค้าได้</p>
                     </div>
                     ${extraItemsHtml}
+                    ${unknownObjectsHtml}
                     <div class="flex justify-center mt-4 space-x-4">
-                        ${Object.keys(extraItems).length === 0 ?
+                        ${(Object.keys(extraItems).length === 0 && !hasUnknownObjectsWithBox) ?
                         `<button id="confirm-order-btn" onclick="verifyOrderWithDebounce(${currentOrderId}, true)" 
                             class="bg-green-500 text-white px-6 py-3 rounded-md hover:bg-green-600 mr-2 flex items-center justify-center shadow-md transition duration-200 ease-in-out transform hover:scale-105">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -618,7 +646,7 @@
                                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
                                 </svg>
-                                พบสินค้าเกิน ไม่สามารถยืนยันได้
+                                ${hasUnknownObjectsWithBox ? 'พบสิ่งแปลกปลอม' : 'พบสินค้าเกิน'} ไม่สามารถยืนยันได้
                             </p>
                         </div>`}
                         <button id="reject-order-btn" onclick="verifyOrderWithDebounce(${currentOrderId}, false)"
@@ -644,7 +672,9 @@
                         <p class="ml-8 text-sm">กรุณาตรวจสอบสินค้าในภาพให้ครบถ้วน</p>
                     </div>
                     ${extraItemsHtml}
-                    <div class="flex justify-center mt-4">                        <button id="reject-incomplete-btn" onclick="verifyOrderWithDebounce(${currentOrderId}, false)"
+                    ${unknownObjectsHtml}
+                    <div class="flex justify-center mt-4">
+                        <button id="reject-incomplete-btn" onclick="verifyOrderWithDebounce(${currentOrderId}, false)"
                             class="bg-yellow-500 text-white px-6 py-3 rounded-md hover:bg-yellow-600 flex items-center justify-center shadow-md transition duration-200 ease-in-out transform hover:scale-105"
                             title="ส่งกลับไปให้พนักงานจัดเตรียมและคืนสต็อกสินค้า">
                             <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -1091,6 +1121,8 @@
                 lockedOrderItems = {};
                 lockedExtraItems = {};
                 lastDetectionState = null;
+                window.currentDetectionResult = null; // ✅ รีเซ็ตข้อมูลปัจจุบัน
+                currentDrawnUnknownObjects = 0; // ✅ รีเซ็ตจำนวน unknown objects ที่วาด
 
                 // อัพเดตสถานะปุ่ม
                 startDetectionBtn.disabled = true;
@@ -1143,6 +1175,8 @@
                 // ✅ รีเซ็ตสถานะการหยุดอัตโนมัติเมื่อหยุดด้วยตนเอง
                 isAutoStopped = false;
                 consecutiveMatchFrames = 0;
+                window.currentDetectionResult = null; // ✅ รีเซ็ตข้อมูลปัจจุบัน
+                currentDrawnUnknownObjects = 0; // ✅ รีเซ็ตจำนวน unknown objects ที่วาด
 
                 // อัพเดตสถานะปุ่ม
                 startDetectionBtn.disabled = false;
@@ -1212,6 +1246,9 @@
             }
         }        // ✅ ฟังก์ชันแสดงผลการตรวจจับ - ปรับปรุงให้มีระบบล็อค
         function displayDetectionResults(result) {
+            // ✅ บันทึกข้อมูล unknown objects ปัจจุบันเพื่อใช้ในการตรวจสอบ
+            window.currentDetectionResult = result;
+
             // ✅ ถ้าระบบหยุดอัตโนมัติแล้ว ใช้ข้อมูลที่ล็อคไว้
             if (isAutoStopped && lockedDetectionResults) {
                 console.log('🔒 ใช้ข้อมูลที่ล็อคไว้แล้ว');
@@ -1316,8 +1353,8 @@
             });
 
             // ✅ ตรวจสอบสถานะความครบถ้วนของออเดอร์
-            const orderComplete = checkIfOrderComplete(orderItems, result.in_order_items || []);            // ✅ ระบบหยุดอัตโนมัติ - ตรวจสอบว่าสินค้าครบและไม่มีสินค้าเกิน
-            if (orderComplete && Object.values(extraItems).reduce((sum, qty) => sum + qty, 0) === 0) {
+            const orderComplete = checkIfOrderComplete(orderItems, result.in_order_items || []);            // ✅ ระบบหยุดอัตโนมัติ - ตรวจสอบว่าสินค้าครบและไม่มีสินค้าเกิน และไม่มี unknown objects ที่ถูกวาดจริง
+            if (orderComplete && Object.values(extraItems).reduce((sum, qty) => sum + qty, 0) === 0 && currentDrawnUnknownObjects === 0) {
                 consecutiveMatchFrames++;
                 console.log(`✅ เฟรมที่ตรงกัน: ${consecutiveMatchFrames}/${autoStopThreshold}`);
                 updateDetectionStatus('detecting', consecutiveMatchFrames);
@@ -1336,15 +1373,24 @@
                     console.log('🔒 หยุดการตรวจจับอัตโนมัติ - สินค้าครบถ้วน');
                 }
             } else {
-                consecutiveMatchFrames = 0; // รีเซ็ตถ้าไม่ตรงเงื่อนไข
+                consecutiveMatchFrames = 0; // รีเซ็ตถ้าไม่ตรงเงื่อนไข (รวมถึงเมื่อมี unknown objects ที่ถูกวาดจริง)
                 updateDetectionStatus('detecting', 0);
+
+                // แสดงเหตุผลที่ไม่หยุดอัตโนมัติ
+                if (currentDrawnUnknownObjects > 0) {
+                    console.log(`⚠️ รีเซ็ตการนับเฟรม: พบ ${currentDrawnUnknownObjects} unknown objects ที่ถูกวาดจริง`);
+                } else if (Object.values(extraItems).reduce((sum, qty) => sum + qty, 0) > 0) {
+                    console.log('⚠️ รีเซ็ตการนับเฟรม: พบสินค้าเกิน');
+                } else if (!orderComplete) {
+                    console.log('⚠️ รีเซ็ตการนับเฟรม: สินค้ายังไม่ครบ');
+                }
             }
 
             // แสดงผลรายการสินค้าที่ล็อคตำแหน่ง
             displayOrderItemsList(orderItems, extraItems);
 
-            // ✅ วาดกรอบบน canvas รวมทั้ง irrelevant objects
-            drawDetectionBoxes(filteredDetections, result.in_order_items || [], result.irrelevant_objects || []);
+            // ✅ วาดกรอบบน canvas รวมทั้ง irrelevant objects และเก็บจำนวนที่ถูกวาดจริง
+            currentDrawnUnknownObjects = drawDetectionBoxes(filteredDetections, result.in_order_items || [], result.irrelevant_objects || []);
 
             // ตรวจสอบการจับคู่กับออเดอร์
             checkOrderItemsMatch(counts);
@@ -1402,27 +1448,67 @@
                 detectionList.appendChild(item);
             });
 
-            // ✅ แสดงสิ่งแปลกปลอมที่ตรวจพบด้วย OpenCV (ถ้ามี)
+            // ✅ แสดงสิ่งแปลกปลอมที่ตรวจพบและถูกวาดจริงบน canvas (ไม่ถูกกรองออก)
             if (lockedDetectionResults && lockedDetectionResults.irrelevant_objects && lockedDetectionResults.irrelevant_objects.length > 0) {
-                const divider = document.createElement('div');
-                divider.className = 'detection-item border-t border-gray-300 pt-2 mt-2';
-                divider.innerHTML = '<span class="text-gray-600 text-sm">สิ่งแปลกปลอมที่ตรวจพบ:</span>';
-                detectionList.appendChild(divider);
+                // กรองเฉพาะ unknown objects ที่มี bounding box และไม่ทับซ้อนกับ YOLO detections
+                const confidenceThreshold = 0.7;
+                const filteredDetections = lockedDetectionResults.detections.filter(detection => detection.confidence > confidenceThreshold);
+                const drawnUnknownObjects = [];
 
                 lockedDetectionResults.irrelevant_objects.forEach((obj, index) => {
-                    const item = document.createElement('div');
-                    item.className = 'detection-item';
-                    item.innerHTML = `
-                        <span class="font-bold text-orange-600">❓ Unknown Object #${index + 1}</span> 
-                        <span class="text-orange-500">${(obj.confidence * 100).toFixed(1)}%</span>
-                    `;
-                    detectionList.appendChild(item);
+                    if (!obj.box || obj.box.length !== 4) return;
+
+                    const [x1, y1, x2, y2] = obj.box;
+                    let isOverlappingWithYolo = false;
+
+                    // ตรวจสอบการทับซ้อนกับ YOLO detections (ใช้เงื่อนไขเดียวกับใน drawDetectionBoxes)
+                    for (const detection of filteredDetections) {
+                        const [yoloX1, yoloY1, yoloX2, yoloY2] = detection.box;
+                        const isOverlapping = !(x2 < yoloX1 || x1 > yoloX2 || y2 < yoloY1 || y1 > yoloY2);
+
+                        if (isOverlapping) {
+                            const overlapX1 = Math.max(x1, yoloX1);
+                            const overlapY1 = Math.max(y1, yoloY1);
+                            const overlapX2 = Math.min(x2, yoloX2);
+                            const overlapY2 = Math.min(y2, yoloY2);
+
+                            const overlapArea = (overlapX2 - overlapX1) * (overlapY2 - overlapY1);
+                            const irrelevantArea = (x2 - x1) * (y2 - y1);
+                            const overlapPercentage = overlapArea / irrelevantArea;
+
+                            if (overlapPercentage > 0.1) {
+                                isOverlappingWithYolo = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!isOverlappingWithYolo) {
+                        drawnUnknownObjects.push({ ...obj, originalIndex: index });
+                    }
                 });
+
+                if (drawnUnknownObjects.length > 0) {
+                    const divider = document.createElement('div');
+                    divider.className = 'detection-item border-t border-gray-300 pt-2 mt-2';
+                    divider.innerHTML = '<span class="text-gray-600 text-sm">สิ่งแปลกปลอมที่ถูกตีกรอบ:</span>';
+                    detectionList.appendChild(divider);
+
+                    drawnUnknownObjects.forEach((obj, index) => {
+                        const item = document.createElement('div');
+                        item.className = 'detection-item';
+                        item.innerHTML = `
+                            <span class="font-bold text-orange-600">❓ Unknown Object #${obj.originalIndex + 1}</span> 
+                            <span class="text-orange-500">${(obj.confidence * 100).toFixed(1)}% - ตีกรอบแล้ว</span>
+                        `;
+                        detectionList.appendChild(item);
+                    });
+                }
             }
 
             // แสดงสินค้าเกิน (ถ้ามี) - ไม่แสดงในรายการหลัก
             // สินค้าเกินจะแสดงในส่วน verification status แทน
-        }// ✅ ฟังก์ชันแสดงผลข้อมูลที่ล็อคไว้
+        }        // ✅ ฟังก์ชันแสดงผลข้อมูลที่ล็อคไว้
         function displayLockedResults() {
             const detectionList = document.getElementById('detection-list');
             detectionList.innerHTML = '';
@@ -1436,14 +1522,84 @@
                     <span class="text-green-600">${lockedOrderItems[label]} ชิ้น</span>
                 `;
                 detectionList.appendChild(item);
-            });            // วาดกรอบที่ล็อคไว้
+            });
+
+            // ✅ แสดงสิ่งแปลกปลอมที่ตรวจพบและถูกวาดจริงบน canvas (ไม่ถูกกรองออก)
+            if (lockedDetectionResults && lockedDetectionResults.irrelevant_objects && lockedDetectionResults.irrelevant_objects.length > 0) {
+                // กรองเฉพาะ unknown objects ที่มี bounding box และไม่ทับซ้อนกับ YOLO detections
+                const confidenceThreshold = 0.7;
+                const filteredDetections = lockedDetectionResults.detections.filter(detection => detection.confidence > confidenceThreshold);
+                const drawnUnknownObjects = [];
+
+                lockedDetectionResults.irrelevant_objects.forEach((obj, index) => {
+                    if (!obj.box || obj.box.length !== 4) return;
+
+                    const [x1, y1, x2, y2] = obj.box;
+                    let isOverlappingWithYolo = false;
+
+                    // ตรวจสอบการทับซ้อนกับ YOLO detections (ใช้เงื่อนไขเดียวกับใน drawDetectionBoxes)
+                    for (const detection of filteredDetections) {
+                        const [yoloX1, yoloY1, yoloX2, yoloY2] = detection.box;
+                        const isOverlapping = !(x2 < yoloX1 || x1 > yoloX2 || y2 < yoloY1 || y1 > yoloY2);
+
+                        if (isOverlapping) {
+                            const overlapX1 = Math.max(x1, yoloX1);
+                            const overlapY1 = Math.max(y1, yoloY1);
+                            const overlapX2 = Math.min(x2, yoloX2);
+                            const overlapY2 = Math.min(y2, yoloY2);
+
+                            const overlapArea = (overlapX2 - overlapX1) * (overlapY2 - overlapY1);
+                            const irrelevantArea = (x2 - x1) * (y2 - y1);
+                            const overlapPercentage = overlapArea / irrelevantArea;
+
+                            if (overlapPercentage > 0.1) {
+                                isOverlappingWithYolo = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!isOverlappingWithYolo) {
+                        drawnUnknownObjects.push({ ...obj, originalIndex: index });
+                    }
+                });
+
+                if (drawnUnknownObjects.length > 0) {
+                    const divider = document.createElement('div');
+                    divider.className = 'detection-item border-t border-gray-300 pt-2 mt-2';
+                    divider.innerHTML = '<span class="text-gray-600 text-sm">สิ่งแปลกปลอมที่ถูกตีกรอบ:</span>';
+                    detectionList.appendChild(divider);
+
+                    drawnUnknownObjects.forEach((obj, index) => {
+                        const item = document.createElement('div');
+                        item.className = 'detection-item';
+                        item.innerHTML = `
+                            <span class="font-bold text-orange-600">❓ Unknown Object #${obj.originalIndex + 1}</span> 
+                            <span class="text-orange-500">${(obj.confidence * 100).toFixed(1)}% - ตีกรอบแล้ว</span>
+                        `;
+                        detectionList.appendChild(item);
+                    });
+                }
+            }
+
+            // วาดกรอบที่ล็อคไว้
             if (lockedDetectionResults) {
                 const confidenceThreshold = 0.7; // ใช้ค่าคงที่
                 const filteredDetections = lockedDetectionResults.detections.filter(detection => detection.confidence > confidenceThreshold);
-                // ✅ ส่ง irrelevant_objects ด้วยเมื่อวาดกรอบ
-                drawDetectionBoxes(filteredDetections, lockedDetectionResults.in_order_items || [], lockedDetectionResults.irrelevant_objects || []);
+                // ✅ ส่ง irrelevant_objects ด้วยเมื่อวาดกรอบ และอัปเดต currentDrawnUnknownObjects
+                currentDrawnUnknownObjects = drawDetectionBoxes(filteredDetections, lockedDetectionResults.in_order_items || [], lockedDetectionResults.irrelevant_objects || []);
+
+                console.log(`🔒 Locked results: drawn ${currentDrawnUnknownObjects} unknown objects`);
+
+                // ✅ เรียก checkOrderItemsMatch เพื่ออัปเดต verification status ด้วยข้อมูลที่ล็อคไว้
+                const counts = {};
+                filteredDetections.forEach(detection => {
+                    const label = detection.label;
+                    counts[label] = (counts[label] || 0) + 1;
+                });
+                checkOrderItemsMatch(counts);
             }
-        }// ✅ ฟังก์ชันวาดกรอบการตรวจจับ
+        }// ✅ ฟังก์ชันวาดกรอบการตรวจจับ - แก้ไขให้ return จำนวน unknown objects ที่วาดจริง
         function drawDetectionBoxes(detections, inOrderItems, irrelevantObjects = []) {
             const cameraStreamImg = document.getElementById('camera-stream');
             const detectionCanvas = document.getElementById('detection-canvas');
@@ -1530,9 +1686,8 @@
                 canvasCtx.fillStyle = '#000000';
                 canvasCtx.fillText(label, scaledX1 + 5, scaledY1 - 5);
             });            // ✅ วาดกรอบสำหรับ irrelevant objects (สิ่งแปลกปลอม) - เฉพาะในพื้นที่ที่ไม่มีกรอบ YOLO
+            let drawnIrrelevantCount = 0;
             if (irrelevantObjects && irrelevantObjects.length > 0) {
-                let drawnIrrelevantCount = 0;
-
                 irrelevantObjects.forEach((obj, index) => {
                     const [x1, y1, x2, y2] = obj.box;
 
@@ -1602,6 +1757,9 @@
 
                 console.log(`🔍 Drew ${drawnIrrelevantCount} out of ${irrelevantObjects.length} irrelevant object boxes (filtered out overlapping with YOLO)`);
             }
+
+            // ✅ Return จำนวน unknown objects ที่ถูกวาดจริง
+            return drawnIrrelevantCount;
         }
 
         // ✅ ฟังก์ชันอัปเดตสถานะการตรวจจับ
