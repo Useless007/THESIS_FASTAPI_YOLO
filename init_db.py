@@ -11,6 +11,7 @@ from app.models.address import Address
 from app.models.camera import Camera
 from app.models.customer import Customer
 from app.models.order_item import OrderItem
+from app.models.order_status_log import OrderStatusLog
 from app.models.order import Order
 from app.models.position import Position
 from app.models.product import Product
