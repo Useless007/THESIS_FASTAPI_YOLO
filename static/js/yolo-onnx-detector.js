@@ -101,7 +101,7 @@ class YOLODetector {
       // Fetch product names from the database first
       this.updateLoadingMessage("กำลังโหลดข้อมูลสินค้า...");
       try {
-        const productResponse = await fetch('http://192.168.0.44:8001/packing/product-names', {
+        const productResponse = await fetch('http://localhost:8001/packing/product-names', {
           headers: {
             'Authorization': 'Bearer ' + token,
           },
@@ -128,7 +128,7 @@ class YOLODetector {
       this.updateLoadingMessage("กำลังดาวน์โหลดโมเดล...");
 
       // Option to use relative URL
-      const modelUrl = 'http://192.168.0.44:8001/packing/model';
+      const modelUrl = 'http://localhost:8001/packing/model';
       const modelResponse = await fetch(modelUrl, {
         headers: {
           'Authorization': 'Bearer ' + token,
